@@ -41,8 +41,8 @@ npm run dev
 ### Geração de Códigos
 - Efeito de embaralhamento com caracteres aleatórios
 - Animação de digitação em tempo real
-- Código final: "H785X"
-- Tempo de expiração: 1 hora
+- Código final: Padrão LNNNL (Letra + 3 Números + Letra) - Ex: "A123B", "K789Z"
+- Tempo de expiração: 30 segundos
 
 ### Sistema de Notificações
 - Notificações de saque em tempo real

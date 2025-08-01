@@ -117,6 +117,21 @@ function App() {
     return chars.charAt(Math.floor(Math.random() * chars.length));
   };
 
+  // Função para gerar código aleatório no padrão: LNNNL (Letra + 3 Números + Letra)
+  // Exemplos: A123B, K789Z, X456Y, M234N
+  const generateRandomCode = () => {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numbers = '0123456789';
+    
+    const firstLetter = letters.charAt(Math.floor(Math.random() * letters.length));
+    const secondLetter = letters.charAt(Math.floor(Math.random() * letters.length));
+    const threeNumbers = Array.from({ length: 3 }, () => 
+      numbers.charAt(Math.floor(Math.random() * numbers.length))
+    ).join('');
+    
+    return `${firstLetter}${threeNumbers}${secondLetter}`;
+  };
+
   // Função para obter uma cor aleatória para os caracteres durante o embaralhamento
   const getRandomColor = () => {
     const colors = ['text-blue-400', 'text-purple-400', 'text-pink-400', 'text-cyan-400', 'text-white'];
@@ -141,7 +156,8 @@ function App() {
       if (iterations >= maxIterations) {
         clearInterval(shuffleInterval);
         setCodeShufflingEffect(false);
-        simulateCodeTyping("H785X");
+        const randomCode = generateRandomCode();
+        simulateCodeTyping(randomCode);
       }
     }, 50);
   };
@@ -162,7 +178,7 @@ function App() {
           setShowButton(true);
 
           const currentTime = new Date().getTime();
-          const expiryTime = currentTime + 3600000;
+          const expiryTime = currentTime + 30000; // 30 segundos
 
           const codeData = {
             code: finalCode,
@@ -311,7 +327,7 @@ function App() {
   useEffect(() => {
     if (!canGenerateNewCode && codeGeneratedTime) {
       const interval = setInterval(() => {
-        const expiryTime = codeGeneratedTime + 3600000;
+        const expiryTime = codeGeneratedTime + 30000; // 30 segundos
         const currentTime = new Date().getTime();
 
         if (currentTime >= expiryTime) {

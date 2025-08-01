@@ -28,8 +28,8 @@ O **Nexus Code Generator** é uma aplicação moderna e elegante para geração 
 ### 1. Geração de Códigos
 - **Efeito de Embaralhamento**: Animação de caracteres aleatórios
 - **Efeito de Digitação**: Simulação de digitação em tempo real
-- **Código Final**: "H785X" (fixo para demonstração)
-- **Tempo de Expiração**: 1 hora por código gerado
+- **Código Final**: Padrão LNNNL (Letra + 3 Números + Letra) - Ex: "A123B", "K789Z"
+- **Tempo de Expiração**: 30 segundos por código gerado
 
 ### 2. Sistema de Notificações
 - **Notificações de Saque**: Simulação de saques em tempo real
