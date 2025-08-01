@@ -270,12 +270,12 @@ function App() {
   // Função para gerar notificação aleatória
   const generateRandomNotification = useCallback(() => {
     const names = ['João Silva', 'Maria Santos', 'Pedro Costa', 'Ana Oliveira', 'Carlos Lima'];
-    const amounts = ['R$ 2.500', 'R$ 1.800', 'R$ 3.200', 'R$ 4.100', 'R$ 2.900'];
+    const fixedAmount = 'R$ 1.333,33';
 
     const newNotification: WithdrawalNotification = {
       id: Date.now(),
       name: names[Math.floor(Math.random() * names.length)],
-      amount: amounts[Math.floor(Math.random() * amounts.length)],
+      amount: fixedAmount,
       visible: true
     };
 

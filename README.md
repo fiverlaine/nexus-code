@@ -45,7 +45,7 @@ npm run dev
 - Tempo de expiração: 30 segundos
 
 ### Sistema de Notificações
-- Notificações de saque em tempo real
+- Notificações de saque com valor fixo de R$ 1.333,33
 - Design glassmorphism moderno
 - Auto-remoção após 5 segundos
 - Posicionamento no canto inferior direito

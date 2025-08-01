@@ -32,7 +32,7 @@ O **Nexus Code Generator** é uma aplicação moderna e elegante para geração 
 - **Tempo de Expiração**: 30 segundos por código gerado
 
 ### 2. Sistema de Notificações
-- **Notificações de Saque**: Simulação de saques em tempo real
+- **Notificações de Saque**: Simulação de saques com valor fixo de R$ 1.333,33
 - **Design Moderno**: Cards com glassmorphism
 - **Auto-remoção**: Desaparecem após 5 segundos
 - **Posicionamento**: Canto inferior direito
