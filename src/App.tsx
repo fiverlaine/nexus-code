@@ -229,7 +229,7 @@ function App() {
 
   // Função para lidar com o clique no botão do broker
   const handleBrokerClick = () => {
-    window.open('https://betlion.com', '_blank');
+    window.open('https://betlionpro.com?aff=156168', '_blank');
   };
 
   // Função para tocar som de clique
