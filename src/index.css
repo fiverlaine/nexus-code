@@ -88,6 +88,38 @@ body {
   .neon-glow:hover {
     box-shadow: 0 0 40px rgba(59, 130, 246, 0.8);
   }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* Internet Explorer 10+ */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar { 
+    display: none;  /* Safari and Chrome */
+  }
+
+  /* Stories specific animations */
+  .story-ring-gradient {
+    background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  }
+
+  .story-viewed {
+    background: #6b7280;
+  }
+
+  /* Story viewer animations */
+  .story-progress-bar {
+    animation: progressFill 0.1s linear;
+  }
+
+  .story-fade-in {
+    animation: storyFadeIn 0.3s ease-out;
+  }
+
+  .story-slide-in {
+    animation: storySlideIn 0.3s ease-out;
+  }
 }
 
 @keyframes fadeIn {
@@ -139,6 +171,35 @@ body {
   }
 }
 
+@keyframes progressFill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes storyFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes storySlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Estilos para scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -155,4 +216,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #2563eb;
-} 
+}

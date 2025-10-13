@@ -1,29 +1,371 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Copy, Loader2, ExternalLink, Zap, Shield, Clock, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Copy, Loader2, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, X, Play, Pause, VolumeX, Volume2 } from 'lucide-react';
 
-// Tipo para as notificações de saque
-type WithdrawalNotification = {
+// (Notificações removidas)
+
+// Tipo para os Stories
+type Story = {
   id: number;
-  name: string;
-  amount: string;
-  visible: boolean;
+  username: string;
+  avatar: string;
+  videos: StoryVideo[];
+  viewed: boolean;
 };
 
-// Componente de notificação de saque com design moderno
-const WithdrawalNotificationItem = ({ name, amount }: { name: string; amount: string }) => {
+type StoryVideo = {
+  id: number;
+  url: string;
+  duration: number;
+  thumbnail?: string;
+};
+
+// Dados dos Stories (simulando dados reais)
+const storiesData: Story[] = [
+  {
+    id: 1,
+    username: 'pedroomonteiiroo_',
+    avatar: 'https://i.postimg.cc/gJMwwddZ/pedroomonteiiroo-avatar-SHORTCODE-20251013-015644-562861281.jpg',
+    viewed: false,
+    videos: [
+      { id: 1, url: '/stories/passo-1.mov', duration: 0 },
+      { id: 2, url: '/stories/passo-2.mov', duration: 0 },
+      { id: 3, url: '/stories/passo-3.mov', duration: 0 },
+      { id: 4, url: '/stories/passo-4.mov', duration: 0 },
+      { id: 5, url: '/stories/passo-5.mov', duration: 0 }
+    ]
+  }
+];
+
+// Componente Story Circle
+const StoryCircle = ({ story, onClick }: { story: Story; onClick: () => void }) => {
   return (
-    <div className="flex items-center gap-3 glass rounded-xl p-4 text-sm shadow-lg animate-slide-up border border-blue-500/20">
-      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-        <Zap className="w-4 h-4 text-white" />
+    <div 
+      className="flex flex-col items-center cursor-pointer group"
+      onClick={onClick}
+    >
+      <div className={`relative p-0.5 rounded-full ${story.viewed ? 'bg-gray-500' : 'bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600'} group-hover:scale-105 transition-transform duration-200`}>
+        <div className="bg-slate-900 p-0.5 rounded-full">
+          <img 
+            src={story.avatar} 
+            alt={story.username}
+            className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover"
+          />
+        </div>
+        {!story.viewed && (
+          <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+            <Play className="w-3 h-3 text-white" />
+          </div>
+        )}
       </div>
-      <div className="flex-1">
-        <span className="text-blue-400 font-semibold">{name}</span>
-        <span className="text-gray-300"> sacou </span>
-        <span className="text-green-400 font-bold">{amount}</span>
+      <span className="text-xs text-gray-300 mt-2 max-w-[70px] truncate">
+        {story.username}
+      </span>
+    </div>
+  );
+};
+
+// Componente Stories Viewer
+const StoriesViewer = ({ 
+  stories, 
+  currentStoryIndex, 
+  onClose, 
+  onNext, 
+  onPrevious 
+}: {
+  stories: Story[];
+  currentStoryIndex: number;
+  onClose: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+}) => {
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // autoplay com som exige interação
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [useUppercaseExt, setUseUppercaseExt] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  const currentStory = stories[currentStoryIndex];
+  const currentVideo = currentStory?.videos[currentVideoIndex];
+
+  // Progresso baseado no tempo do vídeo
+  useEffect(() => {
+    setProgress(0);
+    setUseUppercaseExt(false); // tentar primeiro com extensão minúscula
+    setVideoError(false);
+    if (videoRef.current) {
+      // Reiniciar reprodução ao trocar de vídeo
+      if (!isPaused) {
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  }, [currentVideoIndex, currentStoryIndex, isPaused]);
+
+  // Reset quando muda de story
+  useEffect(() => {
+    setCurrentVideoIndex(0);
+    setProgress(0);
+  }, [currentStoryIndex]);
+
+  const handlePrevious = () => {
+    if (currentVideoIndex > 0) {
+      setCurrentVideoIndex(prev => prev - 1);
+      setProgress(0);
+    } else {
+      onPrevious();
+    }
+  };
+
+  const handleNext = () => {
+    if (currentVideoIndex < currentStory.videos.length - 1) {
+      setCurrentVideoIndex(prev => prev + 1);
+      setProgress(0);
+    } else {
+      onNext();
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (!videoRef.current) {
+      setIsPaused(prev => !prev);
+      return;
+    }
+    if (isPaused) {
+      videoRef.current.play().catch(() => {});
+      setIsPaused(false);
+    } else {
+      videoRef.current.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const toggleMute = () => {
+    if (!videoRef.current) {
+      setIsMuted(prev => !prev);
+      return;
+    }
+    const next = !isMuted;
+    videoRef.current.muted = next;
+    setIsMuted(next);
+    if (!next) {
+      // garantir reprodução com som após interação
+      videoRef.current.play().catch(() => {});
+      setIsPaused(false);
+    }
+  };
+
+  if (!currentStory) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black z-50">
+      <div className="relative w-full h-full bg-black overflow-hidden">
+        {/* Progress bars */}
+        <div className="absolute top-2 left-4 right-4 z-20 flex gap-1">
+          {currentStory.videos.map((_, index) => (
+            <div key={index} className="flex-1 h-1 bg-gray-600 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-white transition-all duration-100 ease-linear"
+                style={{ 
+                  width: index === currentVideoIndex ? `${progress}%` : 
+                         index < currentVideoIndex ? '100%' : '0%' 
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Header */}
+        <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between mt-2">
+          <div className="flex items-center gap-3">
+            <img 
+              src={currentStory.avatar} 
+              alt={currentStory.username}
+              className="w-8 h-8 rounded-full"
+            />
+            <span className="text-white font-semibold text-sm">
+              {currentStory.username}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={toggleMute}
+              className="text-white hover:text-gray-300 transition-colors"
+              title={isMuted ? 'Ativar som' : 'Silenciar'}
+            >
+              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+            <button 
+              onClick={togglePlayPause}
+              className="text-white hover:text-gray-300 transition-colors"
+            >
+              {isPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+            </button>
+            <button 
+              onClick={onClose}
+              className="text-white hover:text-gray-300 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        {/* Video real */}
+        <div className="w-full h-full bg-black relative">
+          <video
+            ref={videoRef}
+            src={(useUppercaseExt && currentVideo?.url) ? currentVideo.url.replace(/\.mov$/i, '.MOV') : currentVideo?.url}
+            className="w-full h-full object-cover"
+            playsInline
+            muted={isMuted}
+            autoPlay
+            onTimeUpdate={(e) => {
+              const v = e.currentTarget;
+              if (v.duration && !isNaN(v.duration)) {
+                setProgress((v.currentTime / v.duration) * 100);
+              }
+            }}
+            onError={() => {
+              // Se falhar com .mov, tenta .MOV (maiuscula)
+              if (!useUppercaseExt) {
+                setUseUppercaseExt(true);
+              } else {
+                setVideoError(true);
+              }
+            }}
+            onEnded={() => {
+              // Avançar para próximo vídeo ou story
+              if (currentVideoIndex < currentStory.videos.length - 1) {
+                setCurrentVideoIndex(prev => prev + 1);
+                setProgress(0);
+              } else {
+                if (currentStoryIndex < stories.length - 1) {
+                  onNext();
+                  setCurrentVideoIndex(0);
+                  setProgress(0);
+                } else {
+                  onClose();
+                }
+              }
+            }}
+          />
+
+          {videoError && (
+            <div className="absolute inset-0 bg-black/70 flex items-center justify-center p-4 text-center">
+              <div className="text-white max-w-sm">
+                <h4 className="font-semibold mb-2">Vídeo não suportado</h4>
+                <p className="text-sm text-gray-300 mb-3">Este arquivo .MOV não pôde ser reproduzido no navegador. Converta para MP4 (H.264 + AAC) mantendo 9:16.</p>
+                <p className="text-xs text-gray-400">Arquivo: {currentVideo?.url}</p>
+              </div>
+            </div>
+          )}
+
+          {isPaused && (
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                <Pause className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation areas */}
+        <button 
+          onClick={handlePrevious}
+          className="absolute left-0 top-0 w-1/3 h-full z-10 flex items-center justify-start pl-4 text-white/50 hover:text-white transition-colors"
+        >
+          <ChevronLeft className="w-8 h-8" />
+        </button>
+        
+        <button 
+          onClick={handleNext}
+          className="absolute right-0 top-0 w-1/3 h-full z-10 flex items-center justify-end pr-4 text-white/50 hover:text-white transition-colors"
+        >
+          <ChevronRight className="w-8 h-8" />
+        </button>
+
+        {/* Center tap area for play/pause */}
+        <button 
+          onClick={togglePlayPause}
+          className="absolute inset-0 w-1/3 left-1/3 top-0 h-full z-10"
+        />
       </div>
     </div>
   );
 };
+
+// Componente Stories Container
+const StoriesContainer = ({ stories }: { stories: Story[] }) => {
+  const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
+  const [storiesState, setStoriesState] = useState(stories);
+
+  const openStory = (index: number) => {
+    setSelectedStoryIndex(index);
+    // Marcar como visualizada
+    setStoriesState(prev => prev.map((story, i) => 
+      i === index ? { ...story, viewed: true } : story
+    ));
+  };
+
+  const closeStory = () => {
+    setSelectedStoryIndex(null);
+  };
+
+  const nextStory = () => {
+    if (selectedStoryIndex !== null && selectedStoryIndex < storiesState.length - 1) {
+      const newIndex = selectedStoryIndex + 1;
+      setSelectedStoryIndex(newIndex);
+      setStoriesState(prev => prev.map((story, i) => 
+        i === newIndex ? { ...story, viewed: true } : story
+      ));
+    } else {
+      closeStory();
+    }
+  };
+
+  const previousStory = () => {
+    if (selectedStoryIndex !== null && selectedStoryIndex > 0) {
+      const newIndex = selectedStoryIndex - 1;
+      setSelectedStoryIndex(newIndex);
+    }
+  };
+
+  return (
+    <>
+      {/* Stories Row */}
+      <div className="w-full mb-8 flex justify-center">
+        <div className="glass rounded-xl p-4 max-w-md">
+          <div className="text-center mb-3">
+            <h3 className="text-sm font-semibold text-gray-300 tracking-wider uppercase">TUTORIAL</h3>
+          </div>
+          <div className="flex justify-center">
+            {storiesState.map((story, index) => (
+              <StoryCircle 
+                key={story.id} 
+                story={story} 
+                onClick={() => openStory(index)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Stories Viewer */}
+      {selectedStoryIndex !== null && (
+        <StoriesViewer 
+          stories={storiesState}
+          currentStoryIndex={selectedStoryIndex}
+          onClose={closeStory}
+          onNext={nextStory}
+          onPrevious={previousStory}
+        />
+      )}
+    </>
+  );
+};
+
+// (Componente de notificações removido)
 
 // Componente para o fundo animado moderno
 const AnimatedBackground = () => {
@@ -109,7 +451,6 @@ function App() {
   const [codeGeneratedTime, setCodeGeneratedTime] = useState<number | null>(null);
   const [canGenerateNewCode, setCanGenerateNewCode] = useState<boolean>(true);
   const [timeRemaining, setTimeRemaining] = useState<string>("");
-  const [notifications, setNotifications] = useState<WithdrawalNotification[]>([]);
 
   // Função para criar um caractere aleatório
   const getRandomChar = () => {
@@ -267,41 +608,7 @@ function App() {
     oscillator.stop(audioContext.currentTime + 0.1);
   };
 
-  // Função para gerar notificação aleatória
-  const generateRandomNotification = useCallback(() => {
-    const names = ['João Silva', 'Maria Santos', 'Pedro Costa', 'Ana Oliveira', 'Carlos Lima'];
-    const fixedAmount = 'R$ 1.333,33';
-
-    const newNotification: WithdrawalNotification = {
-      id: Date.now(),
-      name: names[Math.floor(Math.random() * names.length)],
-      amount: fixedAmount,
-      visible: true
-    };
-
-    setNotifications(prev => [...prev, newNotification]);
-
-    // Remover notificação após 5 segundos
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== newNotification.id));
-    }, 5000);
-  }, []);
-
-  // Efeito para gerar notificações aleatórias
-  useEffect(() => {
-    const initialTimeout = setTimeout(() => {
-      generateRandomNotification();
-    }, Math.random() * 5000 + 3000);
-
-    const interval = setInterval(() => {
-      generateRandomNotification();
-    }, Math.random() * 7000 + 8000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, [generateRandomNotification]);
+  // (Sistema de notificações removido)
 
   // Verificar se há um código salvo no localStorage ao carregar a página
   useEffect(() => {
@@ -364,20 +671,13 @@ function App() {
   return (
     <div className="min-h-screen w-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-gray-100 font-sans flex flex-col items-center justify-center relative overflow-hidden pt-safe pb-safe pl-safe pr-safe">
       <AnimatedBackground />
-
-      {/* Container de notificações */}
-      <div className="fixed bottom-4 right-4 flex flex-col gap-3 z-50 max-w-[280px]">
-        {notifications.map(notification => (
-          <WithdrawalNotificationItem
-            key={notification.id}
-            name={notification.name}
-            amount={notification.amount}
-          />
-        ))}
-      </div>
+      {/* Notificações removidas */}
 
       <div className="w-full px-4 py-8 relative z-10 max-w-[95%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[80%] mx-auto">
-        <header className="text-center mb-12">
+        {/* Stories Container */}
+        <StoriesContainer stories={storiesData} />
+
+        <header className="text-center mb-12 mt-16">
           <div className="relative inline-block">
             {/* Efeito de brilho ao redor do título */}
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-xl blur opacity-30"></div>
@@ -541,4 +841,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

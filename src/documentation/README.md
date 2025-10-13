@@ -2,7 +2,7 @@
 
 ## 📋 Visão Geral
 
-O **Nexus Code Generator** é uma aplicação moderna e elegante para geração de códigos seguros, desenvolvida com React, TypeScript e Tailwind CSS. O projeto apresenta um design contemporâneo com efeitos visuais avançados e uma experiência de usuário fluida.
+O **Nexus Code Generator** é uma aplicação moderna e elegante para geração de códigos seguros, desenvolvida com React, TypeScript e Tailwind CSS. O projeto apresenta um design contemporâneo com efeitos visuais avançados, uma experiência de usuário fluida e agora inclui **Stories interativos** similares ao Instagram.
 
 ## 🎨 Design e Características
 
@@ -11,12 +11,14 @@ O **Nexus Code Generator** é uma aplicação moderna e elegante para geração 
 - **Glassmorphism**: Efeitos de vidro translúcido com blur
 - **Animações Suaves**: Transições fluidas e efeitos visuais
 - **Responsividade**: Interface adaptável para todos os dispositivos
+- **Stories Interativos**: Sistema de stories similar ao Instagram
 
 ### Paleta de Cores
 - **Primária**: Azul (#3b82f6) - Elementos principais
 - **Secundária**: Roxo (#8b5cf6) - Elementos de destaque
 - **Acentuada**: Rosa (#ec4899) - Elementos especiais
 - **Fundo**: Gradiente escuro (slate-900 → slate-800 → slate-900)
+- **Stories**: Gradiente Instagram (amarelo → vermelho → roxo)
 
 ### Tipografia
 - **Fonte Principal**: Inter (Google Fonts)
@@ -25,25 +27,37 @@ O **Nexus Code Generator** é uma aplicação moderna e elegante para geração 
 
 ## ⚡ Funcionalidades
 
-### 1. Geração de Códigos
+### 1. Stories Interativos (NOVO!)
+- **Interface Instagram**: Design idêntico aos stories do Instagram
+- **Navegação Completa**: Avançar/voltar entre stories e vídeos
+- **Controles de Reprodução**: Play/pause com toque no centro
+- **Barra de Progresso**: Indicador visual do progresso de cada vídeo
+- **Estado Visualizado**: Stories visualizados ficam com borda cinza
+- **Auto-play**: Reprodução automática com transição suave
+- **Responsivo**: Funciona perfeitamente em mobile e desktop
+- **Múltiplos Vídeos**: Cada story pode ter vários vídeos
+- **Avatares Dinâmicos**: Fotos de perfil dos usuários
+- **Indicador de Não Visualizado**: Ícone de play para stories novos
+
+### 2. Geração de Códigos
 - **Efeito de Embaralhamento**: Animação de caracteres aleatórios
 - **Efeito de Digitação**: Simulação de digitação em tempo real
 - **Código Final**: Padrão LNNNL (Letra + 3 Números + Letra) - Ex: "A123B", "K789Z"
 - **Tempo de Expiração**: 30 segundos por código gerado
 
-### 2. Sistema de Notificações
+### 3. Sistema de Notificações
 - **Notificações de Saque**: Simulação de saques com valor fixo de R$ 1.333,33
 - **Design Moderno**: Cards com glassmorphism
 - **Auto-remoção**: Desaparecem após 5 segundos
 - **Posicionamento**: Canto inferior direito
 
-### 3. Efeitos Visuais
+### 4. Efeitos Visuais
 - **Fundo Animado**: Partículas flutuantes em canvas
 - **Gradientes Animados**: Texto com gradiente móvel
 - **Neon Glow**: Efeito de brilho nos botões
 - **Pulse Effects**: Indicadores animados
 
-### 4. Interatividade
+### 5. Interatividade
 - **Som de Clique**: Feedback auditivo
 - **Cópia de Código**: Integração com clipboard
 - **Link Externo**: Redirecionamento para BetLion
@@ -258,4 +272,4 @@ npm run preview
 
 **Versão**: 1.0.0  
 **Última Atualização**: Dezembro 2024  
-**Desenvolvedor**: Cursor AI Assistant 
+**Desenvolvedor**: Cursor AI Assistant
