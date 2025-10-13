@@ -87,9 +87,17 @@ const StoriesViewer = ({
   const [useUppercaseExt, setUseUppercaseExt] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [viewRecorded, setViewRecorded] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   const currentStory = stories[currentStoryIndex];
   const currentVideo = currentStory?.videos[currentVideoIndex];
+
+  // Detectar iOS
+  useEffect(() => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
+    setIsIOS(isIOSDevice);
+  }, []);
 
   // Registrar visualização quando o vídeo é visualizado
   useEffect(() => {
@@ -239,21 +247,31 @@ const StoriesViewer = ({
             src={resolveSrc(currentVideo?.url, useUppercaseExt)}
             className="w-full h-full object-cover"
             playsInline
+            webkit-playsinline="true"
             muted={isMuted}
             autoPlay
+            preload="metadata"
+            controls={false}
             onTimeUpdate={(e) => {
               const v = e.currentTarget;
               if (v.duration && !isNaN(v.duration)) {
                 setProgress((v.currentTime / v.duration) * 100);
               }
             }}
-            onError={() => {
+            onError={(e) => {
+              console.error('Erro no vídeo:', e);
               // Primeiro tenta com extensão em maiúsculas (.MP4 ou .MOV); se falhar, exibe aviso
               if (!useUppercaseExt) {
                 setUseUppercaseExt(true);
               } else {
                 setVideoError(true);
               }
+            }}
+            onLoadStart={() => {
+              console.log('Vídeo começou a carregar');
+            }}
+            onCanPlay={() => {
+              console.log('Vídeo pode ser reproduzido');
             }}
             onEnded={() => {
               // Avançar para próximo vídeo ou story
@@ -276,8 +294,18 @@ const StoriesViewer = ({
             <div className="absolute inset-0 bg-black/70 flex items-center justify-center p-4 text-center">
               <div className="text-white max-w-sm">
                 <h4 className="font-semibold mb-2">Vídeo não suportado</h4>
-                <p className="text-sm text-gray-300 mb-3">Este arquivo .MOV não pôde ser reproduzido no navegador. Converta para MP4 (H.264 + AAC) mantendo 9:16.</p>
-                <p className="text-xs text-gray-400">Arquivo: {currentVideo?.url}</p>
+                <p className="text-sm text-gray-300 mb-3">
+                  {isIOS 
+                    ? "iOS requer vídeos MP4 com codec H.264 e áudio AAC. O arquivo pode não estar no formato correto."
+                    : "Este arquivo não pôde ser reproduzido no navegador. Verifique se é MP4 (H.264 + AAC) mantendo 9:16."
+                  }
+                </p>
+                <p className="text-xs text-gray-400 mb-2">Arquivo: {currentVideo?.url}</p>
+                {isIOS && (
+                  <div className="text-xs text-blue-400 bg-blue-900/20 p-2 rounded">
+                    💡 Dica: Para iOS, use vídeos MP4 com H.264 e resolução 9:16
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -867,6 +895,12 @@ const resolveSrc = (url: string | undefined, uppercase: boolean) => {
   if (!url) return '';
   if (!uppercase) return url;
   return url.replace(/\.(mp4|mov)$/i, (ext) => ext.toUpperCase());
+};
+
+// Função para detectar iOS
+const isIOSDevice = () => {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(userAgent);
 };
 
 export default App;

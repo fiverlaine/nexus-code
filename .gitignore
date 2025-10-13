@@ -162,7 +162,7 @@ dist
 
 # Gatsby files
 .cache/
-public
+# public (comentado para permitir _redirects do Netlify)
 
 # Storybook build outputs
 .out
@@ -258,7 +258,7 @@ dist
 
 # Gatsby files
 .cache/
-public
+# public (comentado para permitir _redirects do Netlify)
 
 # Storybook build outputs
 .out
