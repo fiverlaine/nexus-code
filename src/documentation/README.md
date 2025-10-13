@@ -29,13 +29,13 @@ O **Nexus Code Generator** é uma aplicação moderna e elegante para geração 
 
 ### 1. Stories Interativos (NOVO!)
 - **Interface Instagram**: Design idêntico aos stories do Instagram
-- **Navegação Completa**: Avançar/voltar entre stories e vídeos
+- **Navegação Completa**: Avançar/voltar entre stories
 - **Controles de Reprodução**: Play/pause com toque no centro
 - **Barra de Progresso**: Indicador visual do progresso de cada vídeo
 - **Estado Visualizado**: Stories visualizados ficam com borda cinza
 - **Auto-play**: Reprodução automática com transição suave
 - **Responsivo**: Funciona perfeitamente em mobile e desktop
-- **Múltiplos Vídeos**: Cada story pode ter vários vídeos
+- **Rastreamento Individual**: Cada vídeo é rastreado individualmente com ID único (story_id-video_id)
 - **Avatares Dinâmicos**: Fotos de perfil dos usuários
 - **Indicador de Não Visualizado**: Ícone de play para stories novos
 

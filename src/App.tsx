@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Copy, Loader2, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, X, Play, Pause, VolumeX, Volume2 } from 'lucide-react';
+import { recordStoryView, getUniqueViews24h } from './supabase';
 
 // (Notificações removidas)
 
@@ -19,7 +20,7 @@ type StoryVideo = {
   thumbnail?: string;
 };
 
-// Dados dos Stories (simulando dados reais)
+// Dados dos Stories (estrutura original - 1 story com múltiplos vídeos)
 const storiesData: Story[] = [
   {
     id: 1,
@@ -85,9 +86,29 @@ const StoriesViewer = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [useUppercaseExt, setUseUppercaseExt] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [viewRecorded, setViewRecorded] = useState(false);
 
   const currentStory = stories[currentStoryIndex];
   const currentVideo = currentStory?.videos[currentVideoIndex];
+
+  // Registrar visualização quando o vídeo é visualizado
+  useEffect(() => {
+    if (currentStory && currentVideo && !viewRecorded) {
+      // Criar ID único combinando story_id + video_id
+      const uniqueVideoId = `${currentStory.id}-${currentVideo.id}`;
+      recordStoryView(uniqueVideoId).then((success) => {
+        if (success) {
+          setViewRecorded(true);
+          console.log(`Visualização registrada para vídeo ${uniqueVideoId} (Story ${currentStory.id}, Vídeo ${currentVideo.id})`);
+        }
+      });
+    }
+  }, [currentStory, currentVideo, viewRecorded]);
+
+  // Reset viewRecorded quando muda de story ou vídeo
+  useEffect(() => {
+    setViewRecorded(false);
+  }, [currentStoryIndex, currentVideoIndex]);
 
   // Progresso baseado no tempo do vídeo
   useEffect(() => {
@@ -841,10 +862,11 @@ function App() {
   );
 }
 
+// Resolve a URL do vídeo aplicando fallback para extensão em maiúsculas
+const resolveSrc = (url: string | undefined, uppercase: boolean) => {
+  if (!url) return '';
+  if (!uppercase) return url;
+  return url.replace(/\.(mp4|mov)$/i, (ext) => ext.toUpperCase());
+};
+
 export default App;
-  // Resolve a URL do vídeo aplicando fallback para extensão em maiúsculas
-  const resolveSrc = (url: string | undefined, uppercase: boolean) => {
-    if (!url) return '';
-    if (!uppercase) return url;
-    return url.replace(/\.(mp4|mov)$/i, (ext) => ext.toUpperCase());
-  };
