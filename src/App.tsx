@@ -27,11 +27,11 @@ const storiesData: Story[] = [
     avatar: 'https://i.postimg.cc/gJMwwddZ/pedroomonteiiroo-avatar-SHORTCODE-20251013-015644-562861281.jpg',
     viewed: false,
     videos: [
-      { id: 1, url: '/stories/passo-1.mov', duration: 0 },
-      { id: 2, url: '/stories/passo-2.mov', duration: 0 },
-      { id: 3, url: '/stories/passo-3.mov', duration: 0 },
-      { id: 4, url: '/stories/passo-4.mov', duration: 0 },
-      { id: 5, url: '/stories/passo-5.mov', duration: 0 }
+      { id: 1, url: '/stories/passo-1.mp4', duration: 0 },
+      { id: 2, url: '/stories/passo-2.mp4', duration: 0 },
+      { id: 3, url: '/stories/passo-3.mp4', duration: 0 },
+      { id: 4, url: '/stories/passo-4.mp4', duration: 0 },
+      { id: 5, url: '/stories/passo-5.mp4', duration: 0 }
     ]
   }
 ];
@@ -215,7 +215,7 @@ const StoriesViewer = ({
         <div className="w-full h-full bg-black relative">
           <video
             ref={videoRef}
-            src={(useUppercaseExt && currentVideo?.url) ? currentVideo.url.replace(/\.mov$/i, '.MOV') : currentVideo?.url}
+            src={resolveSrc(currentVideo?.url, useUppercaseExt)}
             className="w-full h-full object-cover"
             playsInline
             muted={isMuted}
@@ -227,7 +227,7 @@ const StoriesViewer = ({
               }
             }}
             onError={() => {
-              // Se falhar com .mov, tenta .MOV (maiuscula)
+              // Primeiro tenta com extensão em maiúsculas (.MP4 ou .MOV); se falhar, exibe aviso
               if (!useUppercaseExt) {
                 setUseUppercaseExt(true);
               } else {
@@ -842,3 +842,9 @@ function App() {
 }
 
 export default App;
+  // Resolve a URL do vídeo aplicando fallback para extensão em maiúsculas
+  const resolveSrc = (url: string | undefined, uppercase: boolean) => {
+    if (!url) return '';
+    if (!uppercase) return url;
+    return url.replace(/\.(mp4|mov)$/i, (ext) => ext.toUpperCase());
+  };
