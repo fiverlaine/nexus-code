@@ -44,49 +44,74 @@ export interface StoryViewer {
 export const recordStoryView = async (storyId: string): Promise<boolean> => {
   try {
     const viewerId = getViewerId();
+    console.log(`[recordStoryView] Tentando registrar visualização - storyId: ${storyId}, viewerId: ${viewerId}`);
     
-    // Verificar se já existe uma visualização deste viewer_id para esta story
+    // Verificar se já existe uma visualização deste viewer_id para esta story nas últimas 24 horas
+    // Isso permite múltiplas visualizações do mesmo vídeo se passar muito tempo
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    
     const { data: existingView, error: checkError } = await supabase
       .from('story_views')
-      .select('id')
+      .select('id, viewed_at')
       .eq('story_id', storyId)
       .eq('viewer_id', viewerId)
-      .single();
+      .gte('viewed_at', twentyFourHoursAgo.toISOString())
+      .order('viewed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Erro ao verificar visualização existente:', checkError);
-      return false;
+      console.error('[recordStoryView] Erro ao verificar visualização existente:', checkError);
+      // Continuar mesmo com erro na verificação
     }
 
-    // Se já existe uma visualização, não registrar novamente
+    // Se já existe uma visualização recente (últimas 24h), não registrar novamente
+    // Isso evita spam mas permite múltiplas visualizações depois de 24h
     if (existingView) {
-      console.log(`Visualização já registrada para story ${storyId} pelo viewer ${viewerId}`);
+      console.log(`[recordStoryView] Visualização já registrada recentemente para story ${storyId} pelo viewer ${viewerId}`);
       return true;
     }
 
+    // Obter IP do visualizador
+    let viewerIp = '127.0.0.1';
+    try {
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      if (ipResponse.ok) {
+        const ipData = await ipResponse.json();
+        viewerIp = ipData.ip || '127.0.0.1';
+      }
+    } catch (ipError) {
+      console.warn('[recordStoryView] Erro ao obter IP, usando fallback:', ipError);
+    }
+    
+    const userAgent = navigator.userAgent || 'Unknown';
+
     // Registrar nova visualização
-    const viewerIp = await fetch('https://api.ipify.org?format=json')
-      .then(res => res.json())
-      .then(data => data.ip)
-      .catch(() => '127.0.0.1');
-    const userAgent = navigator.userAgent;
+    const { data: insertData, error: insertError } = await supabase
+      .from('story_views')
+      .insert([{
+        story_id: storyId,
+        viewer_id: viewerId,
+        viewer_ip: viewerIp,
+        user_agent: userAgent,
+      }])
+      .select();
 
-    const { error } = await supabase.from('story_views').insert([{
-      story_id: storyId,
-      viewer_id: viewerId,
-      viewer_ip: viewerIp,
-      user_agent: userAgent,
-    }]);
-
-    if (error) {
-      console.error('Erro ao registrar visualização:', error);
+    if (insertError) {
+      console.error('[recordStoryView] Erro ao registrar visualização:', insertError);
+      console.error('[recordStoryView] Detalhes do erro:', JSON.stringify(insertError, null, 2));
       return false;
     }
 
-    console.log(`Nova visualização registrada para story ${storyId}`);
+    console.log(`[recordStoryView] ✅ Nova visualização registrada com sucesso para story ${storyId}`, insertData);
     return true;
   } catch (error) {
-    console.error('Erro ao registrar visualização:', error);
+    console.error('[recordStoryView] Erro ao registrar visualização:', error);
+    if (error instanceof Error) {
+      console.error('[recordStoryView] Mensagem de erro:', error.message);
+      console.error('[recordStoryView] Stack:', error.stack);
+    }
     return false;
   }
 };
@@ -98,13 +123,70 @@ export const getAllStoriesStats = async (): Promise<StoryStats[]> => {
     // Formato: story_id-video_id (ex: 1-1, 1-2, 1-3, 1-4, 1-5)
     const allVideoIds = ['1-1', '1-2', '1-3', '1-4', '1-5'];
 
-    const { data: statsData, error } = await supabase.rpc('get_all_stories_stats');
+    // Primeiro, tentar usar a função RPC se existir
+    const { data: statsData, error: rpcError } = await supabase.rpc('get_all_stories_stats');
 
-    if (error) {
-      console.error('Erro ao obter estatísticas:', error);
-      return [];
+    // Se a função RPC não existir ou houver erro, calcular diretamente da tabela
+    if (rpcError) {
+      console.warn('Função RPC não disponível, calculando estatísticas diretamente:', rpcError);
+      
+      // Buscar todas as visualizações das últimas 24 horas
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+      
+      const { data: viewsData, error: viewsError } = await supabase
+        .from('story_views')
+        .select('story_id, viewer_id, viewed_at')
+        .gte('viewed_at', twentyFourHoursAgo.toISOString());
+
+      if (viewsError) {
+        console.error('Erro ao buscar visualizações:', viewsError);
+        // Retornar array vazio com estrutura correta
+        return allVideoIds.map(id => ({
+          story_id: id,
+          unique_views_24h: 0,
+          total_views_24h: 0,
+          last_view: null,
+        }));
+      }
+
+      // Calcular estatísticas manualmente
+      const statsMap = new Map<string, { unique: Set<string>, total: number, lastView: Date | null }>();
+      
+      // Inicializar todos os story_ids
+      allVideoIds.forEach(id => {
+        statsMap.set(id, { unique: new Set(), total: 0, lastView: null });
+      });
+
+      // Processar visualizações
+      if (viewsData) {
+        viewsData.forEach((view: any) => {
+          const storyId = view.story_id;
+          if (statsMap.has(storyId)) {
+            const stat = statsMap.get(storyId)!;
+            stat.unique.add(view.viewer_id);
+            stat.total += 1;
+            const viewDate = new Date(view.viewed_at);
+            if (!stat.lastView || viewDate > stat.lastView) {
+              stat.lastView = viewDate;
+            }
+          }
+        });
+      }
+
+      // Converter para formato StoryStats
+      return allVideoIds.map(id => {
+        const stat = statsMap.get(id)!;
+        return {
+          story_id: id,
+          unique_views_24h: stat.unique.size,
+          total_views_24h: stat.total,
+          last_view: stat.lastView ? stat.lastView.toISOString() : null,
+        };
+      });
     }
 
+    // Se a função RPC funcionou, usar os dados retornados
     const statsMap = new Map<string, StoryStats>();
     if (statsData) {
       statsData.forEach((stat: StoryStats) => statsMap.set(stat.story_id, stat));
@@ -127,19 +209,47 @@ export const getAllStoriesStats = async (): Promise<StoryStats[]> => {
 
   } catch (error) {
     console.error('Erro ao obter estatísticas:', error);
-    return [];
+    // Retornar estrutura vazia mesmo em caso de erro
+    return ['1-1', '1-2', '1-3', '1-4', '1-5'].map(id => ({
+      story_id: id,
+      unique_views_24h: 0,
+      total_views_24h: 0,
+      last_view: null,
+    }));
   }
 };
 
 // Função para obter os visualizadores de uma story
 export const getStoryViewers = async (storyId: string): Promise<StoryViewer[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_story_viewers', { p_story_id: storyId });
+    // Primeiro tentar usar a função RPC se existir
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_story_viewers', { p_story_id: storyId });
+    
+    if (!rpcError && rpcData) {
+      return rpcData;
+    }
+
+    // Se a função RPC não existir, buscar diretamente da tabela
+    console.warn('Função RPC não disponível, buscando visualizadores diretamente:', rpcError);
+    
+    const { data, error } = await supabase
+      .from('story_views')
+      .select('viewer_id, viewed_at, viewer_ip, user_agent')
+      .eq('story_id', storyId)
+      .order('viewed_at', { ascending: false });
+
     if (error) {
       console.error('Erro ao obter visualizadores:', error);
       return [];
     }
-    return data || [];
+
+    // Converter para formato StoryViewer
+    return (data || []).map((view: any) => ({
+      viewer_id: view.viewer_id,
+      viewed_at: view.viewed_at,
+      viewer_ip: view.viewer_ip || 'N/A',
+      user_agent: view.user_agent || 'N/A',
+    }));
   } catch (error) {
     console.error('Erro ao obter visualizadores:', error);
     return [];

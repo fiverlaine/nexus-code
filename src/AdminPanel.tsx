@@ -12,10 +12,21 @@ const AdminPanel = () => {
   const loadStats = async () => {
     setLoading(true);
     try {
+      console.log('[AdminPanel] Carregando estatísticas...');
       const data = await getAllStoriesStats();
+      console.log('[AdminPanel] Estatísticas carregadas:', data);
       setStats(data);
+      
+      // Log detalhado para debug
+      const totalViews = data.reduce((sum, stat) => sum + stat.unique_views_24h, 0);
+      console.log(`[AdminPanel] Total de visualizações únicas (24h): ${totalViews}`);
+      console.log(`[AdminPanel] Total de stories: ${data.length}`);
     } catch (error) {
-      console.error('Erro ao carregar estatísticas:', error);
+      console.error('[AdminPanel] Erro ao carregar estatísticas:', error);
+      if (error instanceof Error) {
+        console.error('[AdminPanel] Mensagem:', error.message);
+        console.error('[AdminPanel] Stack:', error.stack);
+      }
     } finally {
       setLoading(false);
     }
@@ -49,38 +60,69 @@ const AdminPanel = () => {
   return <StoriesGridView stories={stats} onSelectStory={handleSelectStory} loading={loading} onRefresh={loadStats} />;
 };
 
-const StoriesGridView = ({ stories, onSelectStory, loading, onRefresh }) => (
-  <div className="min-h-screen bg-gray-900 text-white p-8">
-    <div className="flex justify-between items-center mb-8">
-      <h1 className="text-3xl font-bold">Visualizações de Stories</h1>
-      <button onClick={onRefresh} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
-        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        Atualizar
-      </button>
+const StoriesGridView = ({ stories, onSelectStory, loading, onRefresh }) => {
+  const totalUniqueViews = stories.reduce((sum, s) => sum + s.unique_views_24h, 0);
+  const totalViews = stories.reduce((sum, s) => sum + s.total_views_24h, 0);
+  
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-8">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Visualizações de Stories</h1>
+          <div className="flex items-center gap-4 text-sm text-gray-400">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4" />
+              <span>{totalUniqueViews} visualizações únicas (24h)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>{totalViews} visualizações totais (24h)</span>
+            </div>
+          </div>
+        </div>
+        <button onClick={onRefresh} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </button>
+      </div>
+      {loading ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {[...Array(5)].map((_, i) => <StoryCardSkeleton key={i} />)}
+        </div>
+      ) : stories.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-400 mb-4">Nenhuma visualização encontrada</p>
+          <p className="text-sm text-gray-500">As visualizações aparecerão aqui quando os usuários assistirem aos stories</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {stories.map(story => (
+            <StoryCard key={story.story_id} story={story} onSelect={() => onSelectStory(story)} />
+          ))}
+        </div>
+      )}
     </div>
-    {loading ? (
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {[...Array(12)].map((_, i) => <StoryCardSkeleton key={i} />)}
-      </div>
-    ) : (
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {stories.map(story => (
-          <StoryCard key={story.story_id} story={story} onSelect={() => onSelectStory(story)} />
-        ))}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 const StoryCard = ({ story, onSelect }) => (
   <div onClick={onSelect} className="cursor-pointer group relative aspect-[9/16] bg-gray-800 rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300">
     <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-    <div className="absolute bottom-0 left-0 p-3">
-      <div className="flex items-center gap-2">
-        <Eye className="w-5 h-5" />
-        <span className="text-lg font-bold">{story.unique_views_24h}</span>
+    <div className="absolute bottom-0 left-0 right-0 p-3">
+      <div className="flex items-center gap-2 mb-1">
+        <Eye className="w-5 h-5 text-blue-400" />
+        <span className="text-lg font-bold text-white">{story.unique_views_24h}</span>
+        <span className="text-xs text-gray-400">únicos</span>
+      </div>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-sm font-semibold text-gray-300">{story.total_views_24h}</span>
+        <span className="text-xs text-gray-400">total</span>
       </div>
       <p className="text-xs text-gray-400 font-mono">{story.story_id}</p>
+      {story.last_view && (
+        <p className="text-xs text-gray-500 mt-1">
+          Última: {new Date(story.last_view).toLocaleString('pt-BR')}
+        </p>
+      )}
     </div>
   </div>
 );
