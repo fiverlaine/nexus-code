@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
-import { getAllStoriesStats, getStoryViewers, getGeneralStats, StoryStats, StoryViewer } from './supabase';
-import { Eye, Clock, User, ArrowLeft, RefreshCw, Server, Globe, TrendingUp, BarChart3, Users, Activity, Zap, Filter, ArrowUpDown } from 'lucide-react';
+import { getAllStoriesStats, getStoryViewers, getStoryViewersFullData, getGeneralStats, StoryStats, StoryViewer, UserTrackingData } from './supabase';
+import { Eye, Clock, ArrowLeft, RefreshCw, TrendingUp, BarChart3, Users, Activity, Zap, Filter, ArrowUpDown, Monitor, Smartphone, Tablet, MapPin, MonitorSpeaker, Info, ExternalLink, Fingerprint } from 'lucide-react';
 
 const AdminPanel = () => {
   const [stats, setStats] = useState<StoryStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStory, setSelectedStory] = useState<StoryStats | null>(null);
   const [viewers, setViewers] = useState<StoryViewer[]>([]);
+  const [viewersFullData, setViewersFullData] = useState<UserTrackingData[]>([]);
   const [loadingViewers, setLoadingViewers] = useState(false);
   const [generalStats, setGeneralStats] = useState<any>(null);
   const [sortBy, setSortBy] = useState<'views' | 'unique' | 'recent'>('views');
   const [filterBy, setFilterBy] = useState<'all' | 'with-views'>('all');
+  const [selectedViewer, setSelectedViewer] = useState<UserTrackingData | null>(null);
 
   const loadStats = async () => {
     setLoading(true);
@@ -51,8 +53,12 @@ const AdminPanel = () => {
     setSelectedStory(story);
     setLoadingViewers(true);
     try {
-      const viewersData = await getStoryViewers(story.story_id);
+      const [viewersData, fullData] = await Promise.all([
+        getStoryViewers(story.story_id),
+        getStoryViewersFullData(story.story_id)
+      ]);
       setViewers(viewersData);
+      setViewersFullData(fullData);
     } catch (error) {
       console.error('Erro ao buscar visualizadores:', error);
     } finally {
@@ -88,8 +94,19 @@ const AdminPanel = () => {
       }
     });
 
+  if (selectedViewer) {
+    return <ViewerDetailView viewer={selectedViewer} onBack={() => setSelectedViewer(null)} />;
+  }
+
   if (selectedStory) {
-    return <StoryDetailView story={selectedStory} onBack={handleBack} viewers={viewers} loading={loadingViewers} />;
+    return <StoryDetailView 
+      story={selectedStory} 
+      onBack={handleBack} 
+      viewers={viewers} 
+      viewersFullData={viewersFullData}
+      loading={loadingViewers}
+      onSelectViewer={setSelectedViewer}
+    />;
   }
 
   return <StoriesGridView 
@@ -117,11 +134,22 @@ const StoriesGridView = ({
   onSortChange,
   filterBy,
   onFilterChange,
+}: {
+  stories: StoryStats[];
+  allStories: StoryStats[];
+  onSelectStory: (story: StoryStats) => void;
+  loading: boolean;
+  onRefresh: () => void;
+  generalStats: any;
+  sortBy: 'views' | 'unique' | 'recent';
+  onSortChange: (sort: 'views' | 'unique' | 'recent') => void;
+  filterBy: 'all' | 'with-views';
+  onFilterChange: (filter: 'all' | 'with-views') => void;
 }) => {
-  const totalUniqueViews = allStories.reduce((sum, s) => sum + s.unique_views_24h, 0);
-  const totalViews = allStories.reduce((sum, s) => sum + s.total_views_24h, 0);
+  const totalUniqueViews = allStories.reduce((sum: number, s: StoryStats) => sum + s.unique_views_24h, 0);
+  const totalViews = allStories.reduce((sum: number, s: StoryStats) => sum + s.total_views_24h, 0);
   const completionRate = allStories.length > 0 
-    ? Math.round((allStories.filter(s => s.unique_views_24h > 0).length / allStories.length) * 100)
+    ? Math.round((allStories.filter((s: StoryStats) => s.unique_views_24h > 0).length / allStories.length) * 100)
     : 0;
   
   // Calcular taxa de progressão entre vídeos
@@ -311,7 +339,14 @@ const StoriesGridView = ({
   );
 };
 
-const MetricCard = ({ icon, title, value, subtitle, color, suffix = '' }) => {
+const MetricCard = ({ icon, title, value, subtitle, color, suffix = '' }: {
+  icon: React.ReactNode;
+  title: string;
+  value: number | string;
+  subtitle: string;
+  color: 'blue' | 'purple' | 'green' | 'orange';
+  suffix?: string;
+}) => {
   const colorClasses = {
     blue: 'from-blue-500 to-blue-600',
     purple: 'from-purple-500 to-purple-600',
@@ -333,7 +368,7 @@ const MetricCard = ({ icon, title, value, subtitle, color, suffix = '' }) => {
   );
 };
 
-const StoryCard = ({ story, onSelect }) => {
+const StoryCard = ({ story, onSelect }: { story: StoryStats; onSelect: () => void }) => {
   const videoNumber = story.story_id.split('-')[1];
   const completionPercentage = story.total_views_24h > 0 
     ? Math.min(100, (story.unique_views_24h / story.total_views_24h) * 100)
@@ -400,10 +435,25 @@ const StoryCardSkeleton = () => (
   <div className="aspect-[9/16] bg-gray-800 rounded-lg animate-pulse border border-gray-700" />
 );
 
-const StoryDetailView = ({ story, onBack, viewers, loading }) => {
+const StoryDetailView = ({ story, onBack, viewers, viewersFullData, loading, onSelectViewer }: {
+  story: StoryStats;
+  onBack: () => void;
+  viewers: StoryViewer[];
+  viewersFullData: UserTrackingData[];
+  loading: boolean;
+  onSelectViewer: (viewer: UserTrackingData) => void;
+}) => {
+  // Criar mapa de dados completos por viewer_id
+  const fullDataMap = new Map<string, UserTrackingData>();
+  viewersFullData.forEach((data: UserTrackingData) => {
+    fullDataMap.set(data.viewer_id, data);
+  });
+
   // Agrupar visualizadores por viewer_id e contar visualizações
-  const groupedViewers = viewers.reduce((acc, viewer) => {
+  const groupedViewers = viewers.reduce((acc: any, viewer: StoryViewer) => {
     const key = viewer.viewer_id;
+    const fullData = fullDataMap.get(key);
+    
     if (!acc[key]) {
       acc[key] = {
         viewer_id: viewer.viewer_id,
@@ -411,7 +461,8 @@ const StoryDetailView = ({ story, onBack, viewers, loading }) => {
         user_agent: viewer.user_agent,
         view_count: 1,
         first_view: viewer.viewed_at,
-        last_view: viewer.viewed_at
+        last_view: viewer.viewed_at,
+        full_data: fullData || null
       };
     } else {
       acc[key].view_count += 1;
@@ -432,15 +483,19 @@ const StoryDetailView = ({ story, onBack, viewers, loading }) => {
     ? Math.round((totalViews / uniqueViewers.length) * 10) / 10
     : 0;
 
-  // Detectar dispositivo do user agent
-  const detectDevice = (userAgent: string) => {
+  // Detectar dispositivo do user agent ou usar dados coletados
+  const detectDevice = (viewer: any) => {
+    if (viewer.full_data?.device_type) {
+      return viewer.full_data.device_type;
+    }
+    const userAgent = viewer.user_agent || '';
     if (/mobile|android|iphone|ipad/i.test(userAgent)) return 'Mobile';
     if (/tablet|ipad/i.test(userAgent)) return 'Tablet';
     return 'Desktop';
   };
 
   const deviceStats = uniqueViewers.reduce((acc: any, viewer: any) => {
-    const device = detectDevice(viewer.user_agent);
+    const device = detectDevice(viewer);
     acc[device] = (acc[device] || 0) + 1;
     return acc;
   }, {});
@@ -495,11 +550,11 @@ const StoryDetailView = ({ story, onBack, viewers, loading }) => {
       </div>
 
       {/* Estatísticas de dispositivos */}
-      {Object.keys(deviceStats).length > 0 && (
+      {Object.keys(deviceStats as Record<string, number>).length > 0 && (
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 mb-6">
           <h3 className="text-lg font-semibold mb-4">Distribuição por Dispositivo</h3>
           <div className="flex flex-wrap gap-4">
-            {Object.entries(deviceStats).map(([device, count]: [string, any]) => (
+            {Object.entries(deviceStats as Record<string, number>).map(([device, count]: [string, number]) => (
               <div key={device} className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-blue-500 rounded-full" />
                 <span className="text-sm text-gray-300">{device}:</span>
@@ -539,17 +594,42 @@ const StoryDetailView = ({ story, onBack, viewers, loading }) => {
               </thead>
               <tbody>
                 {uniqueViewers.map((viewer: any, index: number) => (
-                  <tr key={index} className="border-b border-gray-700/50 hover:bg-gray-800/50 transition-colors">
+                  <tr 
+                    key={index} 
+                    className="border-b border-gray-700/50 hover:bg-gray-800/50 transition-colors cursor-pointer"
+                    onClick={() => viewer.full_data && onSelectViewer(viewer.full_data)}
+                  >
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold text-xs">
                           {viewer.viewer_id.substring(0, 2).toUpperCase()}
                         </div>
                         <span className="font-mono text-sm">{viewer.viewer_id.substring(0, 8)}...</span>
+                        {viewer.full_data && (
+                          <span className="text-xs text-blue-400 ml-2">(Ver detalhes)</span>
+                        )}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-300">{viewer.viewer_ip}</td>
-                    <td className="py-3 px-4 text-sm text-gray-300">{detectDevice(viewer.user_agent)}</td>
+                    <td className="py-3 px-4 text-sm text-gray-300">
+                      <div className="flex flex-col">
+                        <span>{viewer.viewer_ip}</span>
+                        {viewer.full_data?.country && (
+                          <span className="text-xs text-gray-500">
+                            {viewer.full_data.city ? `${viewer.full_data.city}, ` : ''}{viewer.full_data.country}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-300">
+                      <div className="flex flex-col">
+                        <span>{detectDevice(viewer)}</span>
+                        {viewer.full_data?.browser && (
+                          <span className="text-xs text-gray-500">
+                            {viewer.full_data.browser} {viewer.full_data.browser_version || ''}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3 px-4">
                       {viewer.view_count > 1 ? (
                         <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-bold">
@@ -574,6 +654,305 @@ const StoryDetailView = ({ story, onBack, viewers, loading }) => {
             </table>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Componente para visualizar detalhes completos de um usuário
+const ViewerDetailView = ({ viewer, onBack }: { viewer: UserTrackingData; onBack: () => void }) => {
+  const getDeviceIcon = () => {
+    if (viewer.is_mobile) return <Smartphone className="w-5 h-5" />;
+    if (viewer.is_tablet) return <Tablet className="w-5 h-5" />;
+    return <Monitor className="w-5 h-5" />;
+  };
+
+  const getDeviceColor = () => {
+    if (viewer.is_mobile) return 'text-blue-400';
+    if (viewer.is_tablet) return 'text-purple-400';
+    return 'text-green-400';
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-4 md:p-8">
+      <div className="flex items-center gap-4 mb-8">
+        <button 
+          onClick={onBack} 
+          className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Detalhes do Usuário
+          </h1>
+          <p className="text-gray-400 font-mono text-sm">{viewer.viewer_id}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Coluna Principal - Informações Básicas */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Identificação */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Fingerprint className="w-5 h-5 text-blue-400" />
+              Identificação
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-400 mb-1">ID do Usuário</p>
+                <p className="font-mono text-sm">{viewer.viewer_id}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">IP Address</p>
+                <p className="font-mono text-sm">{viewer.viewer_ip}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Primeira Visita</p>
+                <p className="text-sm">{new Date(viewer.first_view_at).toLocaleString('pt-BR')}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Última Visita</p>
+                <p className="text-sm">{new Date(viewer.last_view_at).toLocaleString('pt-BR')}</p>
+              </div>
+              {viewer.pages_viewed && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Páginas Visualizadas</p>
+                  <p className="text-sm font-bold text-blue-400">{viewer.pages_viewed}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Localização */}
+          {(viewer.country || viewer.city) && (
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-red-400" />
+                Localização
+              </h2>
+              <div className="grid grid-cols-2 gap-4">
+                {viewer.country && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">País</p>
+                    <p className="text-sm font-semibold">{viewer.country}</p>
+                  </div>
+                )}
+                {viewer.city && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Cidade</p>
+                    <p className="text-sm font-semibold">{viewer.city}</p>
+                  </div>
+                )}
+                {viewer.timezone && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Fuso Horário</p>
+                    <p className="text-sm">{viewer.timezone}</p>
+                  </div>
+                )}
+                {viewer.language && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Idioma</p>
+                    <p className="text-sm">{viewer.language}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Dispositivo e Navegador */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <MonitorSpeaker className="w-5 h-5 text-green-400" />
+              Dispositivo e Navegador
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Tipo de Dispositivo</p>
+                <div className="flex items-center gap-2">
+                  <span className={getDeviceColor()}>{getDeviceIcon()}</span>
+                  <p className="text-sm font-semibold">{viewer.device_type || 'Unknown'}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Plataforma</p>
+                <p className="text-sm">{viewer.platform || 'Unknown'}</p>
+              </div>
+              {viewer.browser && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Navegador</p>
+                  <p className="text-sm font-semibold">
+                    {viewer.browser} {viewer.browser_version ? `v${viewer.browser_version}` : ''}
+                  </p>
+                </div>
+              )}
+              {viewer.operating_system && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Sistema Operacional</p>
+                  <p className="text-sm font-semibold">
+                    {viewer.operating_system} {viewer.os_version ? `v${viewer.os_version}` : ''}
+                  </p>
+                </div>
+              )}
+              {viewer.screen_resolution && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Resolução da Tela</p>
+                  <p className="text-sm">{viewer.screen_resolution}</p>
+                  {viewer.screen_width && viewer.screen_height && (
+                    <p className="text-xs text-gray-500">
+                      {viewer.screen_width} × {viewer.screen_height}px
+                    </p>
+                  )}
+                </div>
+              )}
+              {viewer.vendor && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Fabricante</p>
+                  <p className="text-sm">{viewer.vendor}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Origem e Referência */}
+          {(viewer.referrer || viewer.landing_page || viewer.utm_source) && (
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <ExternalLink className="w-5 h-5 text-yellow-400" />
+                Origem e Referência
+              </h2>
+              <div className="space-y-4">
+                {viewer.landing_page && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Página de Entrada</p>
+                    <a 
+                      href={viewer.landing_page} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-400 hover:text-blue-300 break-all"
+                    >
+                      {viewer.landing_page}
+                    </a>
+                  </div>
+                )}
+                {viewer.referrer && viewer.referrer !== 'Direct' && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Referrer</p>
+                    <a 
+                      href={viewer.referrer} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-400 hover:text-blue-300 break-all"
+                    >
+                      {viewer.referrer}
+                    </a>
+                  </div>
+                )}
+                {(viewer.utm_source || viewer.utm_medium || viewer.utm_campaign) && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-2">Parâmetros UTM</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {viewer.utm_source && (
+                        <div>
+                          <span className="text-gray-500">Source:</span> <span className="font-semibold">{viewer.utm_source}</span>
+                        </div>
+                      )}
+                      {viewer.utm_medium && (
+                        <div>
+                          <span className="text-gray-500">Medium:</span> <span className="font-semibold">{viewer.utm_medium}</span>
+                        </div>
+                      )}
+                      {viewer.utm_campaign && (
+                        <div>
+                          <span className="text-gray-500">Campaign:</span> <span className="font-semibold">{viewer.utm_campaign}</span>
+                        </div>
+                      )}
+                      {viewer.utm_term && (
+                        <div>
+                          <span className="text-gray-500">Term:</span> <span className="font-semibold">{viewer.utm_term}</span>
+                        </div>
+                      )}
+                      {viewer.utm_content && (
+                        <div>
+                          <span className="text-gray-500">Content:</span> <span className="font-semibold">{viewer.utm_content}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* User Agent */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Info className="w-5 h-5 text-purple-400" />
+              User Agent
+            </h2>
+            <p className="text-xs font-mono text-gray-300 break-all bg-gray-900/50 p-3 rounded">
+              {viewer.user_agent}
+            </p>
+          </div>
+        </div>
+
+        {/* Coluna Lateral - Informações Adicionais */}
+        <div className="space-y-6">
+          {/* Status */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Status</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">Mobile</span>
+                <span className={`text-sm font-semibold ${viewer.is_mobile ? 'text-green-400' : 'text-gray-500'}`}>
+                  {viewer.is_mobile ? 'Sim' : 'Não'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">Tablet</span>
+                <span className={`text-sm font-semibold ${viewer.is_tablet ? 'text-green-400' : 'text-gray-500'}`}>
+                  {viewer.is_tablet ? 'Sim' : 'Não'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">Desktop</span>
+                <span className={`text-sm font-semibold ${viewer.is_desktop ? 'text-green-400' : 'text-gray-500'}`}>
+                  {viewer.is_desktop ? 'Sim' : 'Não'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">Bot</span>
+                <span className={`text-sm font-semibold ${viewer.is_bot ? 'text-red-400' : 'text-green-400'}`}>
+                  {viewer.is_bot ? 'Sim' : 'Não'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Dados Adicionais */}
+          {viewer.tracking_data && (
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700">
+              <h2 className="text-xl font-semibold mb-4">Dados Adicionais</h2>
+              <div className="space-y-2 text-sm">
+                {viewer.tracking_data.connection_type && (
+                  <div>
+                    <span className="text-gray-400">Conexão:</span>{' '}
+                    <span className="font-semibold">{viewer.tracking_data.connection_type}</span>
+                  </div>
+                )}
+                {viewer.tracking_data.session_start && (
+                  <div>
+                    <span className="text-gray-400">Sessão iniciada:</span>{' '}
+                    <span className="font-semibold">
+                      {new Date(viewer.tracking_data.session_start).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

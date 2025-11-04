@@ -27,11 +27,14 @@ Este projeto implementa uma landing page otimizada para conversão de tráfego p
 
 - **Banco de Dados:** PostgreSQL
 - **Tabelas:**
-  - `story_views`: Armazena cada visualização de story, incluindo `story_id`, `viewer_id`, `viewer_ip`, `user_agent` e `viewed_at`.
-- **Funções:**
-  - `get_unique_views_24h`: Retorna o número de visualizadores únicos para um story nas últimas 24 horas.
-  - `get_all_stories_stats`: Retorna estatísticas agregadas para todos os stories.
-  - `get_story_viewers`: Retorna a lista de visualizadores para um story específico.
+  - `story_views`: Tabela legada (mantida para compatibilidade). Cada visualização era uma linha separada.
+  - `user_story_views`: **Nova tabela otimizada** que agrupa todas as visualizações por usuário em uma única linha usando JSONB.
+    - Estrutura: `viewer_id` (PK), `viewer_ip`, `user_agent`, `stories_viewed` (JSONB array), `first_view_at`, `last_view_at`
+    - **Vantagem:** Reduz drasticamente o número de linhas no banco (de N linhas para 1 linha por usuário)
+- **Funções RPC:**
+  - `add_story_view`: Adiciona uma visualização ao array JSONB do usuário (usa UPSERT)
+  - `get_all_stories_stats`: Retorna estatísticas agregadas para todos os stories (trabalha com JSONB)
+  - `get_story_viewers`: Retorna a lista de visualizadores para um story específico (expande JSONB)
 
 ## 🎯 Funcionalidades de Conversão Implementadas
 
@@ -412,6 +415,55 @@ npm run preview
 npm run lint
 ```
 
+## Otimização de Banco de Dados (Novembro 2024)
+
+### Problema Identificado
+A tabela `story_views` criava uma nova linha para cada visualização de story. Um usuário que visualizava 5 stories gerava 5 linhas na tabela, causando crescimento exponencial do banco de dados.
+
+### Solução Implementada
+Criação da tabela `user_story_views` que agrupa todas as visualizações por usuário (`viewer_id`) em uma única linha:
+
+**Antes:**
+```
+story_views:
+- id: uuid-1, viewer_id: user-123, story_id: 1-1, viewed_at: ...
+- id: uuid-2, viewer_id: user-123, story_id: 1-2, viewed_at: ...
+- id: uuid-3, viewer_id: user-123, story_id: 1-3, viewed_at: ...
+- id: uuid-4, viewer_id: user-123, story_id: 1-4, viewed_at: ...
+- id: uuid-5, viewer_id: user-123, story_id: 1-5, viewed_at: ...
+```
+
+**Depois:**
+```
+user_story_views:
+- viewer_id: user-123, stories_viewed: [
+    {story_id: "1-1", viewed_at: "..."},
+    {story_id: "1-2", viewed_at: "..."},
+    {story_id: "1-3", viewed_at: "..."},
+    {story_id: "1-4", viewed_at: "..."},
+    {story_id: "1-5", viewed_at: "..."}
+  ]
+```
+
+### Benefícios
+- ✅ **Redução de linhas:** De N linhas para 1 linha por usuário
+- ✅ **Melhor performance:** Queries mais rápidas com índices GIN no JSONB
+- ✅ **Escalabilidade:** Suporta crescimento muito maior de dados
+- ✅ **Dados históricos preservados:** Todas as visualizações mantidas no array JSONB
+
+### Migração Realizada
+1. ✅ Criada tabela `user_story_views` com estrutura otimizada
+2. ✅ Migrados dados existentes da tabela `story_views`
+3. ✅ Criada função RPC `add_story_view` para UPSERT otimizado
+4. ✅ Atualizado código TypeScript para usar nova estrutura
+5. ✅ Mantida compatibilidade com código existente
+
+### Funções Atualizadas
+- `recordStoryView()`: Agora usa `add_story_view` RPC
+- `getAllStoriesStats()`: Trabalha com JSONB expandido
+- `getStoryViewers()`: Expande array JSONB e filtra por story_id
+- `getGeneralStats()`: Processa dados da nova estrutura
+
 ## Status do Projeto
 
 ✅ **Concluído e Otimizado para Conversão**
@@ -419,6 +471,7 @@ npm run lint
 - Prova social implementada
 - Facebook Pixel configurado
 - Todas as otimizações de CRO aplicadas
+- **Banco de dados otimizado (Novembro 2024)**
 - Documentação completa
 
 🎯 **Taxa de Conversão Esperada:** 15-30% de cliques no CTA principal (visitors → clicks BetLion)
