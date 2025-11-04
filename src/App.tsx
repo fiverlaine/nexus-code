@@ -1,8 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Loader2, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, X, Play, Pause, VolumeX, Volume2 } from 'lucide-react';
-import { recordStoryView, getUniqueViews24h } from './supabase';
+import { Copy, Loader2, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, X, Play, Pause, VolumeX, Volume2, Users, Clock, Shield, TrendingUp, Award, Zap, AlertCircle, Star, ArrowRight, Timer, Lock } from 'lucide-react';
+import { recordStoryView } from './supabase';
 
-// (Notificações removidas)
+// Sistema de Notificações de Prova Social
+type Notification = {
+  id: number;
+  message: string;
+  type: 'saque' | 'deposito' | 'codigo';
+  amount?: string;
+  time: string;
+};
+
+const generateRandomNotification = (): Notification => {
+  const names = ['Lucas M.', 'Maria S.', 'Pedro R.', 'Ana C.', 'João P.', 'Carla F.', 'Rafael T.', 'Julia V.', 'Bruno L.', 'Fernanda A.'];
+  const name = names[Math.floor(Math.random() * names.length)];
+  
+  return {
+    id: Date.now(),
+    message: `${name} acabou de sacar R$ 1000`,
+    type: 'saque',
+    amount: '1000',
+    time: 'Agora'
+  };
+};
 
 // Tipo para os Stories
 type Story = {
@@ -58,7 +78,7 @@ const StoryCircle = ({ story, onClick }: { story: Story; onClick: () => void }) 
           </div>
         )}
       </div>
-      <span className="text-xs text-gray-300 mt-2 max-w-[70px] truncate">
+      <span className="text-xs text-gray-300 mt-2 whitespace-nowrap">
         {story.username}
       </span>
     </div>
@@ -71,13 +91,15 @@ const StoriesViewer = ({
   currentStoryIndex, 
   onClose, 
   onNext, 
-  onPrevious 
+  onPrevious,
+  onLastVideoCompleted
 }: {
   stories: Story[];
   currentStoryIndex: number;
   onClose: () => void;
   onNext: () => void;
   onPrevious: () => void;
+  onLastVideoCompleted?: () => void;
 }) => {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -88,6 +110,7 @@ const StoriesViewer = ({
   const [videoError, setVideoError] = useState(false);
   const [viewRecorded, setViewRecorded] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const lastVideoCompletedRef = useRef<boolean>(false);
 
   const currentStory = stories[currentStoryIndex];
   const currentVideo = currentStory?.videos[currentVideoIndex];
@@ -118,17 +141,30 @@ const StoriesViewer = ({
     setViewRecorded(false);
   }, [currentStoryIndex, currentVideoIndex]);
 
-  // Progresso baseado no tempo do vídeo
+  // Reset flag quando muda de story
+  useEffect(() => {
+    lastVideoCompletedRef.current = false;
+  }, [currentStoryIndex]);
+
+  // Progresso baseado no tempo do vídeo - separado em dois useEffects
   useEffect(() => {
     setProgress(0);
     setUseUppercaseExt(false); // tentar primeiro com extensão minúscula
     setVideoError(false);
-    if (videoRef.current) {
-      // Reiniciar reprodução ao trocar de vídeo
-      if (!isPaused) {
-        videoRef.current.currentTime = 0;
-        videoRef.current.play().catch(() => {});
-      }
+    
+    // Verificar se chegou no vídeo 5 (último vídeo, índice 4) - só uma vez
+    if (currentStory && currentVideoIndex === currentStory.videos.length - 1 && onLastVideoCompleted && !lastVideoCompletedRef.current) {
+      lastVideoCompletedRef.current = true;
+      // Liberar assim que chegar no vídeo 5
+      onLastVideoCompleted();
+    }
+  }, [currentVideoIndex, currentStoryIndex, currentStory, onLastVideoCompleted]);
+
+  // Gerenciar reprodução do vídeo separadamente
+  useEffect(() => {
+    if (videoRef.current && !isPaused) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
     }
   }, [currentVideoIndex, currentStoryIndex, isPaused]);
 
@@ -188,7 +224,7 @@ const StoriesViewer = ({
   if (!currentStory) return null;
 
   return (
-    <div className="fixed inset-0 bg-black z-50">
+    <div className="fixed inset-0 bg-black z-[60]">
       <div className="relative w-full h-full bg-black overflow-hidden">
         {/* Progress bars */}
         <div className="absolute top-2 left-4 right-4 z-20 flex gap-1">
@@ -268,10 +304,10 @@ const StoriesViewer = ({
               }
             }}
             onLoadStart={() => {
-              console.log('Vídeo começou a carregar');
+              // Vídeo começou a carregar - evento pode ser chamado múltiplas vezes
             }}
             onCanPlay={() => {
-              console.log('Vídeo pode ser reproduzido');
+              // Removido console.log para evitar spam - evento pode ser chamado múltiplas vezes
             }}
             onEnded={() => {
               // Avançar para próximo vídeo ou story
@@ -284,6 +320,7 @@ const StoriesViewer = ({
                   setCurrentVideoIndex(0);
                   setProgress(0);
                 } else {
+                  // Último vídeo do último story - fechar
                   onClose();
                 }
               }
@@ -344,21 +381,204 @@ const StoriesViewer = ({
   );
 };
 
+// Componente de Notificação
+const NotificationPopup = ({ notification, onClose }: { notification: Notification; onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+      <div className="glass border border-green-500/30 rounded-lg px-3 py-2 shadow-lg backdrop-blur-xl bg-green-500/10">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-3 h-3 text-green-400 flex-shrink-0" />
+          <p className="text-xs font-medium text-white whitespace-nowrap">{notification.message}</p>
+          <button 
+            onClick={onClose}
+            className="flex-shrink-0 text-gray-400 hover:text-white transition-colors ml-1"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente Contador de Pessoas Online
+const OnlineCounter = () => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    // Número inicial aleatório entre 247-289
+    const initialCount = Math.floor(Math.random() * (289 - 247 + 1)) + 247;
+    setCount(initialCount);
+
+    // Variação sutil a cada 3-7 segundos
+    const interval = setInterval(() => {
+      const change = Math.random() > 0.5 ? 1 : -1;
+      setCount(prev => Math.max(230, Math.min(299, prev + change)));
+    }, Math.random() * 1000 + 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="glass rounded-lg px-4 py-2 border border-green-500/30 animate-pulse-soft">
+      <div className="flex items-center gap-2">
+        <div className="relative">
+          <Users className="w-5 h-5 text-green-500" />
+          <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-gray-400">Online agora</span>
+          <span className="text-sm font-bold text-green-500">{count} pessoas</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente Banner Sticky de Urgência
+const StickyBanner = ({ onClose }: { onClose: () => void }) => {
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-red-600 via-orange-600 to-red-600 animate-slide-down">
+      <div className="container mx-auto px-4 py-2">
+        <div className="flex items-center justify-center gap-3 text-white text-sm font-semibold">
+          <AlertCircle className="w-5 h-5 animate-pulse" />
+          <span className="flex-1 text-center">
+            Método funcionando por tempo limitado!
+          </span>
+          <button 
+            onClick={onClose}
+            className="text-white hover:text-gray-200 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// Componente de Depoimentos
+const Testimonials = () => {
+  const testimonials = [
+    {
+      name: 'Carlos M.',
+      amount: 'R$ 1.500',
+      time: 'Há 2 horas',
+      avatar: '👤',
+      text: 'Funcionou perfeitamente! Consegui sacar em menos de 30 minutos.'
+    },
+    {
+      name: 'Ana P.',
+      amount: 'R$ 800',
+      time: 'Há 5 horas',
+      avatar: '👤',
+      text: 'Não acreditava que era real, mas realmente funcionou. Recomendo!'
+    },
+    {
+      name: 'Rafael S.',
+      amount: 'R$ 2.200',
+      time: 'Há 8 horas',
+      avatar: '👤',
+      text: 'Método simples e eficaz. Já compartilhei com meus amigos.'
+    }
+  ];
+
+  return (
+    <div className="mt-12 max-w-4xl mx-auto">
+      <h3 className="text-2xl font-bold text-white text-center mb-6">
+        <Star className="w-6 h-6 inline text-yellow-400 mr-2" />
+        O que estão dizendo
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {testimonials.map((testimonial, index) => (
+          <div key={index} className="glass rounded-xl p-5 border border-purple-500/30 animate-fade-in">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-2xl">
+                {testimonial.avatar}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-bold text-white text-sm">{testimonial.name}</span>
+                  <div className="flex text-yellow-400">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-3 h-3 fill-current" />
+                    ))}
+                  </div>
+                </div>
+                <span className="text-xs text-green-400 font-semibold">{testimonial.amount}</span>
+                <span className="text-xs text-gray-400 ml-2">• {testimonial.time}</span>
+              </div>
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed">{testimonial.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // Componente Stories Container
-const StoriesContainer = ({ stories }: { stories: Story[] }) => {
+const StoriesContainer = ({ stories, onGenerateClick, onStoriesCompleted, onStoryOpen, onStoryClose }: { stories: Story[]; onGenerateClick: () => void; onStoriesCompleted: () => void; onStoryOpen?: () => void; onStoryClose?: () => void }) => {
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [storiesState, setStoriesState] = useState(stories);
+  const [storiesViewed, setStoriesViewed] = useState<boolean>(false);
 
   const openStory = (index: number) => {
     setSelectedStoryIndex(index);
+    // Notificar que story foi aberto
+    if (onStoryOpen) {
+      onStoryOpen();
+    }
     // Marcar como visualizada
     setStoriesState(prev => prev.map((story, i) => 
       i === index ? { ...story, viewed: true } : story
     ));
+    
+    // Facebook Pixel - Visualização de Story
+    if (typeof window.fbq === 'function') {
+      window.fbq('trackCustom', 'StoryOpened', {
+        story_id: stories[index].id,
+        story_username: stories[index].username,
+        story_index: index
+      });
+    }
   };
 
   const closeStory = () => {
+    const currentIndex = selectedStoryIndex;
     setSelectedStoryIndex(null);
+    // Notificar que story foi fechado
+    if (onStoryClose) {
+      onStoryClose();
+    }
+    // Não marcar como visualizado aqui - só quando chegar no vídeo 5
+  };
+
+  const handleLastVideoCompleted = () => {
+    // Liberar assim que chegar no vídeo 5 (não precisa terminar)
+    if (!storiesViewed) {
+      setStoriesViewed(true);
+      
+      // Notificar componente pai que chegou no vídeo 5
+      onStoriesCompleted();
+      
+      // Facebook Pixel - Chegou no último vídeo
+      if (typeof window.fbq === 'function' && selectedStoryIndex !== null) {
+        window.fbq('trackCustom', 'StoryLastVideoReached', {
+          story_id: storiesState[selectedStoryIndex]?.id,
+          videos_watched: storiesState[selectedStoryIndex]?.videos.length || 0,
+          last_video_reached: true
+        });
+      }
+    }
   };
 
   const nextStory = () => {
@@ -382,11 +602,17 @@ const StoriesContainer = ({ stories }: { stories: Story[] }) => {
 
   return (
     <>
-      {/* Stories Row */}
+      {/* Stories Row com destaque maior */}
       <div className="w-full mb-8 flex justify-center">
-        <div className="glass rounded-xl p-4 max-w-md">
-          <div className="text-center mb-3">
-            <h3 className="text-sm font-semibold text-gray-300 tracking-wider uppercase">TUTORIAL</h3>
+        <div className="glass rounded-xl p-6 max-w-md border-2 border-blue-500/30 relative">
+          {/* Badge de destaque */}
+          <div className="absolute -top-3 inset-x-0 mx-auto w-max bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-1 rounded-full shadow-lg">
+            <span className="text-xs font-bold text-white uppercase tracking-wider">Assista Primeiro</span>
+          </div>
+          
+          <div className="text-center mb-4 mt-2">
+            <h3 className="text-lg font-bold text-white tracking-wider uppercase mb-1">Tutorial do Método</h3>
+            <p className="text-xs text-gray-400">Veja como funciona em 5 passos simples</p>
           </div>
           <div className="flex justify-center">
             {storiesState.map((story, index) => (
@@ -408,6 +634,7 @@ const StoriesContainer = ({ stories }: { stories: Story[] }) => {
           onClose={closeStory}
           onNext={nextStory}
           onPrevious={previousStory}
+          onLastVideoCompleted={handleLastVideoCompleted}
         />
       )}
     </>
@@ -500,6 +727,15 @@ function App() {
   const [codeGeneratedTime, setCodeGeneratedTime] = useState<number | null>(null);
   const [canGenerateNewCode, setCanGenerateNewCode] = useState<boolean>(true);
   const [timeRemaining, setTimeRemaining] = useState<string>("");
+  
+  // Estados para notificações e prova social
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  
+  // Estados para melhorias de conversão
+  const [showStickyBanner, setShowStickyBanner] = useState<boolean>(true);
+  const [timeOnPage, setTimeOnPage] = useState<number>(0);
+  const [storiesCompleted, setStoriesCompleted] = useState<boolean>(false);
+  const [isStoryOpen, setIsStoryOpen] = useState<boolean>(false);
 
   // Função para criar um caractere aleatório
   const getRandomChar = () => {
@@ -599,6 +835,27 @@ function App() {
     setCodeGenerated(false);
     setCodeCopied(false);
 
+    // Facebook Pixel - Evento de geração de código
+    if (typeof window.fbq === 'function') {
+      // Evento customizado
+      window.fbq('trackCustom', 'GenerateCode', {
+        content_name: 'Código de Segurança',
+        content_category: 'Geração',
+        value: 1.00,
+        currency: 'BRL',
+        time_on_page: timeOnPage,
+        source: 'main_button'
+      });
+      
+      // Evento padrão ViewContent para engajamento
+      window.fbq('track', 'ViewContent', {
+        content_name: 'Gerador de Código',
+        content_category: 'Engajamento',
+        value: 1.00,
+        currency: 'BRL'
+      });
+    }
+
     simulateCodeShuffling();
     setIsGenerating(false);
   };
@@ -611,6 +868,26 @@ function App() {
 
     setTimeout(() => {
       setCodeCopied(true);
+
+      // Facebook Pixel - Evento de cópia do código
+      if (typeof window.fbq === 'function') {
+        // Evento AddToCart (micro-conversão)
+        window.fbq('track', 'AddToCart', {
+          content_name: 'Código Copiado',
+          content_category: 'Engajamento',
+          value: 2.00,
+          currency: 'BRL',
+          content_ids: [displayedCode]
+        });
+        
+        // Evento customizado para análise
+        window.fbq('trackCustom', 'CodeCopied', {
+          code: displayedCode,
+          time_to_copy: timeOnPage,
+          value: 2.00,
+          currency: 'BRL'
+        });
+      }
 
       navigator.clipboard.writeText(displayedCode)
         .then(() => {
@@ -635,6 +912,42 @@ function App() {
 
   // Função para lidar com o clique no botão do broker
   const handleBrokerClick = () => {
+    // Facebook Pixel - Evento de conversão (Lead/InitiateCheckout)
+    if (typeof window.fbq === 'function') {
+      const conversionValue = codeCopied ? 15.00 : 10.00; // Valor maior se copiaram código
+      
+      // Evento InitiateCheckout (conversão principal)
+      window.fbq('track', 'InitiateCheckout', {
+        content_name: 'Acesso Plataforma BetLion',
+        content_category: 'Conversão',
+        value: conversionValue,
+        currency: 'BRL',
+        num_items: 1,
+        content_ids: displayedCode ? [displayedCode] : []
+      });
+      
+      // Evento Lead (conversão principal)
+      window.fbq('track', 'Lead', {
+        content_name: 'Clique BetLion',
+        content_category: 'Conversão Principal',
+        value: conversionValue,
+        currency: 'BRL',
+        source: 'landing_page',
+        engagement_time: timeOnPage
+      });
+      
+      // Evento customizado para análise detalhada
+      window.fbq('trackCustom', 'PlatformClick', {
+        platform: 'BetLion',
+        code_generated: codeGenerated,
+        code_copied: codeCopied,
+        code: displayedCode || 'none',
+        time_on_page: timeOnPage,
+        value: conversionValue,
+        currency: 'BRL'
+      });
+    }
+
     window.open('https://betlionpro.com?aff=156168&utm=code&src=code', '_blank');
   };
 
@@ -657,7 +970,30 @@ function App() {
     oscillator.stop(audioContext.currentTime + 0.1);
   };
 
-  // (Sistema de notificações removido)
+  // Sistema de notificações de prova social
+  useEffect(() => {
+    // Gerar notificação a cada 8-15 segundos
+    const generateNotification = () => {
+      const newNotification = generateRandomNotification();
+      setNotifications(prev => [...prev, newNotification]);
+      
+      // Remover notificação após 5 segundos
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== newNotification.id));
+      }, 5000);
+    };
+
+    // Primeira notificação após 3 segundos
+    const initialTimeout = setTimeout(generateNotification, 3000);
+    
+    // Notificações subsequentes
+    const interval = setInterval(generateNotification, Math.random() * 7000 + 8000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Verificar se há um código salvo no localStorage ao carregar a página
   useEffect(() => {
@@ -700,6 +1036,14 @@ function App() {
     }
   }, [canGenerateNewCode, codeGeneratedTime]);
 
+  // Rastrear tempo na página
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeOnPage(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Função para atualizar o tempo restante
   const updateTimeRemaining = (expiryTime: number) => {
     const currentTime = new Date().getTime();
@@ -720,13 +1064,38 @@ function App() {
   return (
     <div className="min-h-screen w-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-gray-100 font-sans flex flex-col items-center justify-center relative overflow-hidden pt-safe pb-safe pl-safe pr-safe">
       <AnimatedBackground />
-      {/* Notificações removidas */}
+      
+      {/* Banner Sticky de Urgência - Escondido quando story está aberto */}
+      {showStickyBanner && !isStoryOpen && (
+        <StickyBanner onClose={() => setShowStickyBanner(false)} />
+      )}
+      
+      {/* Notificações de Prova Social */}
+      {notifications.map(notification => (
+        <NotificationPopup 
+          key={notification.id}
+          notification={notification}
+          onClose={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+        />
+      ))}
 
-      <div className="w-full px-4 py-8 relative z-10 max-w-[95%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[80%] mx-auto">
+      <div className={`w-full px-4 py-8 relative z-10 max-w-[95%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[80%] mx-auto ${showStickyBanner ? 'pt-16' : ''}`}>
+        
+        {/* Contador de Pessoas Online */}
+        <div className="flex justify-center mb-6">
+          <OnlineCounter />
+        </div>
+
         {/* Stories Container */}
-        <StoriesContainer stories={storiesData} />
+        <StoriesContainer 
+          stories={storiesData} 
+          onGenerateClick={handleGenerateClick}
+          onStoriesCompleted={() => setStoriesCompleted(true)}
+          onStoryOpen={() => setIsStoryOpen(true)}
+          onStoryClose={() => setIsStoryOpen(false)}
+        />
 
-        <header className="text-center mb-12 mt-16">
+        <header className="text-center mb-12 mt-8">
           <div className="relative inline-block">
             {/* Efeito de brilho ao redor do título */}
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-xl blur opacity-30"></div>
@@ -742,9 +1111,11 @@ function App() {
             </div>
           </div>
 
-          <p className="text-gray-400 text-sm font-light tracking-wider mb-6">
-            Gerador de Código Seguro
+          <p className="text-gray-400 text-lg font-medium tracking-wide mb-2">
+            Gerador de código seguro
           </p>
+          
+         
 
           {/* Separador com efeito de gradiente */}
           <div className="relative w-40 h-0.5 bg-gradient-to-r from-blue-500/30 via-purple-500/50 to-pink-500/30 mx-auto rounded-full overflow-hidden">
@@ -759,13 +1130,39 @@ function App() {
             <div className="mb-8">
               {showButton && (
                 <div className="relative mx-auto w-64">
+                  {/* Mensagem informativa se stories não foram completados */}
+                  {!storiesCompleted && (
+                    <div className="mb-4 text-center animate-fade-in">
+                      <div className="glass rounded-lg px-4 py-3 border border-yellow-500/30 bg-yellow-500/10">
+                        <div className="flex items-center justify-center gap-2 text-yellow-400 text-sm font-semibold">
+                          <Play className="w-5 h-5 animate-pulse" />
+                          <span>Assista o tutorial acima para liberar o botão de gerar código</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mensagem de confirmação após completar stories */}
+                  {storiesCompleted && !codeGenerated && (
+                    <div className="mb-4 text-center animate-fade-in">
+                      <div className="glass rounded-lg px-4 py-3 border border-green-500/30 bg-green-500/10">
+                        <div className="flex items-center justify-center gap-2 text-green-400 text-sm font-semibold">
+                          <CheckCircle className="w-5 h-5" />
+                          <span>Tutorial completo! Agora você pode gerar seu código</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <button
                     onClick={() => {
-                      handleGenerateClick();
-                      playClickSound();
+                      if (storiesCompleted) {
+                        handleGenerateClick();
+                        playClickSound();
+                      }
                     }}
-                    disabled={isGenerating || codeTypingEffect || codeShufflingEffect}
-                    className={`relative w-full overflow-hidden px-8 ${!canGenerateNewCode && timeRemaining ? 'py-3' : 'py-4'} rounded-xl font-semibold ${!canGenerateNewCode && timeRemaining ? 'text-lg' : 'text-xl'} uppercase tracking-wider text-center transition-all duration-300 glass hover:neon-glow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-70 group mx-auto block shadow-lg`}
+                    disabled={isGenerating || codeTypingEffect || codeShufflingEffect || !storiesCompleted}
+                    className={`relative w-full overflow-hidden px-8 ${!canGenerateNewCode && timeRemaining ? 'py-3' : 'py-4'} rounded-xl font-semibold ${!canGenerateNewCode && timeRemaining ? 'text-lg' : 'text-xl'} uppercase tracking-wider text-center transition-all duration-300 glass hover:neon-glow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed group mx-auto block shadow-lg ${!storiesCompleted ? 'grayscale' : ''}`}
                   >
                     {/* Efeito de brilho nos cantos do botão */}
                     <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-blue-500 rounded-tl-xl"></div>
@@ -778,6 +1175,11 @@ function App() {
                         <div className="flex items-center justify-center">
                           <Loader2 className="animate-spin h-5 w-5 mr-2" />
                           <span>PROCESSANDO</span>
+                        </div>
+                      ) : !storiesCompleted ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <Play className="w-5 h-5" />
+                          <span>GERAR CÓDIGO</span>
                         </div>
                       ) : canGenerateNewCode ? (
                         "GERAR CÓDIGO"
@@ -862,11 +1264,26 @@ function App() {
 
                       <button
                         onClick={handleBrokerClick}
-                        className="px-4 py-3 rounded-lg glass hover:neon-glow transition-all flex items-center gap-2 w-full justify-center shadow-md border border-white/10"
+                        className="relative px-6 py-4 rounded-lg bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 transition-all flex items-center gap-2 w-full justify-center shadow-lg border-2 border-green-400 group overflow-hidden animate-pulse-soft"
                       >
-                        <ExternalLink size={20} className="text-white" />
-                        <span className="text-white font-semibold">ACESSAR BETLION</span>
+                        <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                        <ExternalLink size={22} className="text-white z-10" />
+                        <span className="text-white font-bold text-lg z-10 uppercase">Acessar Plataforma</span>
+                        <ArrowRight size={20} className="text-white z-10 group-hover:translate-x-1 transition-transform" />
+                        <div className="absolute -right-1 top-0 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-bl-lg animate-pulse">
+                          AGORA
+                        </div>
                       </button>
+
+                      {/* Indicadores de Confiança */}
+                      <div className="mt-4 space-y-2">
+                        
+                        <div className="flex items-center justify-center gap-2 text-xs text-green-400">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>+2.847 saques realizados nas últimas 24h</span>
+                        </div>
+                        
+                      </div>
                     </div>
                   )}
                 </div>
@@ -876,11 +1293,27 @@ function App() {
         </div>
 
         <footer className="mt-16 text-center">
+          <div className="mb-4 flex items-center justify-center gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              <span>Seguro</span>
+            </div>
+            <span>•</span>
+            <div className="flex items-center gap-1">
+              <CheckCircle className="w-3 h-3" />
+              <span>Verificado</span>
+            </div>
+            <span>•</span>
+            <div className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              <span>24/7</span>
+            </div>
+          </div>
           <p className="text-gray-400 text-xs font-light tracking-wider">
             <span className="">&lt;</span>
             <span className="text-blue-500">/</span>
             <span className="">&gt;</span>
-            <span className="mx-2">com tecnologia avançada</span>
+            <span className="mx-2">Tecnologia Avançada de Criptografia</span>
             <span className="text-gray-500">|</span>
             <span className="ml-2">{new Date().getFullYear()}</span>
           </p>
@@ -895,12 +1328,6 @@ const resolveSrc = (url: string | undefined, uppercase: boolean) => {
   if (!url) return '';
   if (!uppercase) return url;
   return url.replace(/\.(mp4|mov)$/i, (ext) => ext.toUpperCase());
-};
-
-// Função para detectar iOS
-const isIOSDevice = () => {
-  const userAgent = navigator.userAgent.toLowerCase();
-  return /iphone|ipad|ipod/.test(userAgent);
 };
 
 export default App;
