@@ -125,11 +125,24 @@ const StoriesGridView = ({
     : 0;
   
   // Calcular taxa de progressão entre vídeos
+  // Conta quantos pares consecutivos de vídeos foram visualizados
+  // Exemplo: se vídeo 1 e 2 foram vistos = 1 par, se 1, 2 e 3 foram vistos = 2 pares
   const progressionRate = allStories.length > 1
-    ? Math.round((allStories.filter((s, i) => {
-        if (i === 0) return true;
-        return s.unique_views_24h > 0 && allStories[i - 1].unique_views_24h > 0;
-      }).length / (allStories.length - 1)) * 100)
+    ? (() => {
+        let consecutivePairs = 0;
+        const totalPairs = allStories.length - 1; // Total de pares possíveis (4 para 5 vídeos)
+        
+        // Contar pares consecutivos visualizados (começando do índice 1, não 0)
+        for (let i = 1; i < allStories.length; i++) {
+          // Um par é considerado se ambos os vídeos (anterior e atual) foram visualizados
+          if (allStories[i - 1].unique_views_24h > 0 && allStories[i].unique_views_24h > 0) {
+            consecutivePairs++;
+          }
+        }
+        
+        // Calcular porcentagem: pares consecutivos / total de pares possíveis
+        return totalPairs > 0 ? Math.round((consecutivePairs / totalPairs) * 100) : 0;
+      })()
     : 0;
 
   const maxHourViews = generalStats?.viewsPerHour 
