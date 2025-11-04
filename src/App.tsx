@@ -111,6 +111,7 @@ const StoriesViewer = ({
   const [viewRecorded, setViewRecorded] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const lastVideoCompletedRef = useRef<boolean>(false);
+  const currentVideoKeyRef = useRef<string>(''); // Rastrear qual vídeo está sendo reproduzido
 
   const currentStory = stories[currentStoryIndex];
   const currentVideo = currentStory?.videos[currentVideoIndex];
@@ -146,23 +147,26 @@ const StoriesViewer = ({
     lastVideoCompletedRef.current = false;
   }, [currentStoryIndex]);
 
-  // Progresso baseado no tempo do vídeo - separado em dois useEffects
+  // Reset progresso e configurações quando muda de vídeo
   useEffect(() => {
     setProgress(0);
     setUseUppercaseExt(false); // tentar primeiro com extensão minúscula
     setVideoError(false);
     
-    // Verificar se chegou no vídeo 5 (último vídeo, índice 4) - só uma vez
-    if (currentStory && currentVideoIndex === currentStory.videos.length - 1 && onLastVideoCompleted && !lastVideoCompletedRef.current) {
-      lastVideoCompletedRef.current = true;
-      // Liberar assim que chegar no vídeo 5
-      onLastVideoCompleted();
+    // Criar uma chave única para o vídeo atual
+    const videoKey = `${currentStoryIndex}-${currentVideoIndex}`;
+    currentVideoKeyRef.current = videoKey;
+    
+    // Resetar o currentTime do vídeo para evitar valores antigos afetarem o progresso
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
     }
-  }, [currentVideoIndex, currentStoryIndex, currentStory, onLastVideoCompleted]);
+  }, [currentVideoIndex, currentStoryIndex]);
 
   // Gerenciar reprodução do vídeo separadamente
   useEffect(() => {
     if (videoRef.current && !isPaused) {
+      // Garantir que o vídeo está no início
       videoRef.current.currentTime = 0;
       videoRef.current.play().catch(() => {});
     }
@@ -290,8 +294,18 @@ const StoriesViewer = ({
             controls={false}
             onTimeUpdate={(e) => {
               const v = e.currentTarget;
-              if (v.duration && !isNaN(v.duration)) {
-                setProgress((v.currentTime / v.duration) * 100);
+              // Verificar se o vídeo tem duração válida e está pronto
+              if (v.duration && !isNaN(v.duration) && v.readyState >= 2 && v.currentTime >= 0) {
+                // Criar chave do vídeo atual para verificar se ainda é o mesmo
+                const videoKey = `${currentStoryIndex}-${currentVideoIndex}`;
+                
+                // Só atualizar se ainda for o vídeo atual
+                if (videoKey === currentVideoKeyRef.current) {
+                  const newProgress = (v.currentTime / v.duration) * 100;
+                  // Garantir que o progresso está entre 0 e 100
+                  const clampedProgress = Math.min(100, Math.max(0, newProgress));
+                  setProgress(clampedProgress);
+                }
               }
             }}
             onError={(e) => {
@@ -304,14 +318,32 @@ const StoriesViewer = ({
               }
             }}
             onLoadStart={() => {
-              // Vídeo começou a carregar - evento pode ser chamado múltiplas vezes
+              // Vídeo começou a carregar - resetar progresso para evitar valores antigos
+              setProgress(0);
             }}
             onCanPlay={() => {
-              // Removido console.log para evitar spam - evento pode ser chamado múltiplas vezes
+              // Quando o vídeo está pronto para reproduzir, garantir que está no início
+              if (videoRef.current) {
+                videoRef.current.currentTime = 0;
+                setProgress(0);
+              }
+            }}
+            onLoadedData={() => {
+              // Quando os dados do vídeo são carregados, garantir progresso em 0
+              setProgress(0);
             }}
             onEnded={() => {
+              // Verificar se é o último vídeo (vídeo 5, índice 4) ANTES de avançar
+              const isLastVideo = currentVideoIndex === currentStory.videos.length - 1;
+              
+              // Se for o último vídeo, marcar como completo ANTES de fechar/avançar
+              if (isLastVideo && onLastVideoCompleted && !lastVideoCompletedRef.current) {
+                lastVideoCompletedRef.current = true;
+                onLastVideoCompleted();
+              }
+              
               // Avançar para próximo vídeo ou story
-              if (currentVideoIndex < currentStory.videos.length - 1) {
+              if (!isLastVideo) {
                 setCurrentVideoIndex(prev => prev + 1);
                 setProgress(0);
               } else {
