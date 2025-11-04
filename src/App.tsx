@@ -111,7 +111,8 @@ const StoriesViewer = ({
   const [viewRecorded, setViewRecorded] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const lastVideoCompletedRef = useRef<boolean>(false);
-  const currentVideoKeyRef = useRef<string>(''); // Rastrear qual vídeo está sendo reproduzido
+  const progressUpdateRef = useRef<number | null>(null);
+  const lastProgressRef = useRef<number>(0);
 
   const currentStory = stories[currentStoryIndex];
   const currentVideo = currentStory?.videos[currentVideoIndex];
@@ -147,26 +148,26 @@ const StoriesViewer = ({
     lastVideoCompletedRef.current = false;
   }, [currentStoryIndex]);
 
-  // Reset progresso e configurações quando muda de vídeo
+  // Progresso baseado no tempo do vídeo - separado em dois useEffects
   useEffect(() => {
     setProgress(0);
+    lastProgressRef.current = 0;
     setUseUppercaseExt(false); // tentar primeiro com extensão minúscula
     setVideoError(false);
     
-    // Criar uma chave única para o vídeo atual
-    const videoKey = `${currentStoryIndex}-${currentVideoIndex}`;
-    currentVideoKeyRef.current = videoKey;
-    
-    // Resetar o currentTime do vídeo para evitar valores antigos afetarem o progresso
-    if (videoRef.current) {
-      videoRef.current.currentTime = 0;
+    // Cancelar qualquer atualização de progresso pendente
+    if (progressUpdateRef.current !== null) {
+      cancelAnimationFrame(progressUpdateRef.current);
+      progressUpdateRef.current = null;
     }
-  }, [currentVideoIndex, currentStoryIndex]);
+    
+    // NÃO chamar onLastVideoCompleted aqui - só quando o vídeo realmente terminar
+    // Removido: chamada prematura ao chegar no vídeo 5
+  }, [currentVideoIndex, currentStoryIndex, currentStory]);
 
   // Gerenciar reprodução do vídeo separadamente
   useEffect(() => {
     if (videoRef.current && !isPaused) {
-      // Garantir que o vídeo está no início
       videoRef.current.currentTime = 0;
       videoRef.current.play().catch(() => {});
     }
@@ -232,17 +233,32 @@ const StoriesViewer = ({
       <div className="relative w-full h-full bg-black overflow-hidden">
         {/* Progress bars */}
         <div className="absolute top-2 left-4 right-4 z-20 flex gap-1">
-          {currentStory.videos.map((_, index) => (
-            <div key={index} className="flex-1 h-1 bg-gray-600 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-white transition-all duration-100 ease-linear"
-                style={{ 
-                  width: index === currentVideoIndex ? `${progress}%` : 
-                         index < currentVideoIndex ? '100%' : '0%' 
-                }}
-              />
-            </div>
-          ))}
+          {currentStory.videos.map((_, index) => {
+            // Calcular largura da barra de progresso
+            let width = '0%';
+            if (index < currentVideoIndex) {
+              // Vídeos já completados: 100%
+              width = '100%';
+            } else if (index === currentVideoIndex) {
+              // Vídeo atual: usar progresso atual (0-100%)
+              width = `${Math.min(100, Math.max(0, progress))}%`;
+            } else {
+              // Vídeos futuros: 0%
+              width = '0%';
+            }
+            
+            return (
+              <div key={index} className="flex-1 h-1 bg-gray-600 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-white transition-all duration-75 ease-linear"
+                  style={{ 
+                    width: width,
+                    willChange: index === currentVideoIndex ? 'width' : 'auto'
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
 
         {/* Header */}
@@ -294,17 +310,24 @@ const StoriesViewer = ({
             controls={false}
             onTimeUpdate={(e) => {
               const v = e.currentTarget;
-              // Verificar se o vídeo tem duração válida e está pronto
-              if (v.duration && !isNaN(v.duration) && v.readyState >= 2 && v.currentTime >= 0) {
-                // Criar chave do vídeo atual para verificar se ainda é o mesmo
-                const videoKey = `${currentStoryIndex}-${currentVideoIndex}`;
+              // Só atualizar progresso se o vídeo estiver tocando e não pausado
+              if (!isPaused && v.duration && !isNaN(v.duration) && v.duration > 0 && !v.paused && !v.ended) {
+                const newProgress = Math.min(100, Math.max(0, (v.currentTime / v.duration) * 100));
                 
-                // Só atualizar se ainda for o vídeo atual
-                if (videoKey === currentVideoKeyRef.current) {
-                  const newProgress = (v.currentTime / v.duration) * 100;
-                  // Garantir que o progresso está entre 0 e 100
-                  const clampedProgress = Math.min(100, Math.max(0, newProgress));
-                  setProgress(clampedProgress);
+                // Evitar atualizações muito frequentes e oscilações
+                // Só atualizar se a diferença for significativa (> 0.1%) ou se for um aumento
+                if (Math.abs(newProgress - lastProgressRef.current) > 0.1 || newProgress > lastProgressRef.current) {
+                  // Cancelar atualização anterior se existir
+                  if (progressUpdateRef.current !== null) {
+                    cancelAnimationFrame(progressUpdateRef.current);
+                  }
+                  
+                  // Usar requestAnimationFrame para suavizar atualizações
+                  progressUpdateRef.current = requestAnimationFrame(() => {
+                    setProgress(newProgress);
+                    lastProgressRef.current = newProgress;
+                    progressUpdateRef.current = null;
+                  });
                 }
               }
             }}
@@ -318,32 +341,23 @@ const StoriesViewer = ({
               }
             }}
             onLoadStart={() => {
-              // Vídeo começou a carregar - resetar progresso para evitar valores antigos
-              setProgress(0);
+              // Vídeo começou a carregar - evento pode ser chamado múltiplas vezes
             }}
             onCanPlay={() => {
-              // Quando o vídeo está pronto para reproduzir, garantir que está no início
-              if (videoRef.current) {
-                videoRef.current.currentTime = 0;
-                setProgress(0);
-              }
-            }}
-            onLoadedData={() => {
-              // Quando os dados do vídeo são carregados, garantir progresso em 0
-              setProgress(0);
+              // Removido console.log para evitar spam - evento pode ser chamado múltiplas vezes
             }}
             onEnded={() => {
-              // Verificar se é o último vídeo (vídeo 5, índice 4) ANTES de avançar
+              // Verificar se é o último vídeo (índice 4, o 5º vídeo) e completou
               const isLastVideo = currentVideoIndex === currentStory.videos.length - 1;
               
-              // Se for o último vídeo, marcar como completo ANTES de fechar/avançar
               if (isLastVideo && onLastVideoCompleted && !lastVideoCompletedRef.current) {
+                // Só marcar como completo quando realmente terminar o 5º vídeo
                 lastVideoCompletedRef.current = true;
                 onLastVideoCompleted();
               }
               
               // Avançar para próximo vídeo ou story
-              if (!isLastVideo) {
+              if (currentVideoIndex < currentStory.videos.length - 1) {
                 setCurrentVideoIndex(prev => prev + 1);
                 setProgress(0);
               } else {
