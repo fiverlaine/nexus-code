@@ -255,3 +255,82 @@ export const getStoryViewers = async (storyId: string): Promise<StoryViewer[]> =
     return [];
   }
 };
+
+// Função para obter estatísticas gerais
+export const getGeneralStats = async () => {
+  try {
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    
+    const { data: viewsData, error } = await supabase
+      .from('story_views')
+      .select('viewed_at, story_id, viewer_id')
+      .gte('viewed_at', twentyFourHoursAgo.toISOString());
+
+    if (error) {
+      console.error('Erro ao buscar estatísticas gerais:', error);
+      return {
+        totalViews: 0,
+        uniqueViewers: 0,
+        viewsPerHour: [],
+        retentionRate: 0,
+        avgViewsPerUser: 0,
+      };
+    }
+
+    const views = viewsData || [];
+    const uniqueViewers = new Set(views.map((v: any) => v.viewer_id)).size;
+    
+    // Agrupar por hora
+    const viewsPerHour: { hour: string; count: number }[] = [];
+    const hourMap = new Map<string, number>();
+    
+    views.forEach((view: any) => {
+      const date = new Date(view.viewed_at);
+      const hour = `${date.getHours().toString().padStart(2, '0')}:00`;
+      hourMap.set(hour, (hourMap.get(hour) || 0) + 1);
+    });
+    
+    // Criar array de 24 horas
+    for (let i = 0; i < 24; i++) {
+      const hour = `${i.toString().padStart(2, '0')}:00`;
+      viewsPerHour.push({
+        hour,
+        count: hourMap.get(hour) || 0,
+      });
+    }
+
+    // Calcular taxa de retenção (usuários que viram múltiplos vídeos)
+    const viewerStoryMap = new Map<string, Set<string>>();
+    views.forEach((view: any) => {
+      if (!viewerStoryMap.has(view.viewer_id)) {
+        viewerStoryMap.set(view.viewer_id, new Set());
+      }
+      viewerStoryMap.get(view.viewer_id)!.add(view.story_id);
+    });
+    
+    const viewersWithMultipleStories = Array.from(viewerStoryMap.values()).filter(
+      stories => stories.size > 1
+    ).length;
+    const retentionRate = uniqueViewers > 0 
+      ? (viewersWithMultipleStories / uniqueViewers) * 100 
+      : 0;
+
+    return {
+      totalViews: views.length,
+      uniqueViewers,
+      viewsPerHour,
+      retentionRate: Math.round(retentionRate * 10) / 10,
+      avgViewsPerUser: uniqueViewers > 0 ? Math.round((views.length / uniqueViewers) * 10) / 10 : 0,
+    };
+  } catch (error) {
+    console.error('Erro ao calcular estatísticas gerais:', error);
+    return {
+      totalViews: 0,
+      uniqueViewers: 0,
+      viewsPerHour: [],
+      retentionRate: 0,
+      avgViewsPerUser: 0,
+    };
+  }
+};
