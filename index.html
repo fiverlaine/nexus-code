@@ -15,7 +15,7 @@
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
     
-    <!-- Script 1: Criar _fbp cookie se não existir -->
+    <!-- Script 1: Criar _fbp cookie se não existir E não vier da URL -->
     <script>
       (function () {
         function getCookie(name) {
@@ -25,16 +25,41 @@
             ?.split("=")[1];
         }
         function setFbpCookie() {
-          if (!getCookie("_fbp")) {
-            var fbp = "fb.1." + Date.now() + "." + Math.floor(Math.random() * 1e10);
-            var expires = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString();
-            var domain = location.hostname.replace(/^www\./, "");
-            document.cookie = "_fbp=" + fbp
-              + "; path=/"
-              + "; domain=" + domain
-              + "; expires=" + expires
-              + "; samesite=lax";
+          // Verificar se já existe cookie _fbp
+          if (getCookie("_fbp")) {
+            return;
           }
+          
+          // Verificar se fbp veio da URL (do insta1)
+          try {
+            var urlParams = new URLSearchParams(window.location.search);
+            var fbpFromUrl = urlParams.get('fbp');
+            if (fbpFromUrl) {
+              // Se fbp veio da URL, usar esse valor para criar o cookie
+              // Isso garante match entre eventos mesmo quando não está em iframe
+              var expires = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString();
+              var domain = location.hostname.replace(/^www\./, "");
+              document.cookie = "_fbp=" + fbpFromUrl
+                + "; path=/"
+                + "; domain=" + domain
+                + "; expires=" + expires
+                + "; samesite=lax";
+              console.log('✅ FBP da URL usado para criar cookie:', fbpFromUrl);
+              return;
+            }
+          } catch (e) {
+            console.warn('Erro ao verificar fbp na URL:', e);
+          }
+          
+          // Se não veio da URL, criar um novo fbp apenas se necessário
+          var fbp = "fb.1." + Date.now() + "." + Math.floor(Math.random() * 1e10);
+          var expires = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString();
+          var domain = location.hostname.replace(/^www\./, "");
+          document.cookie = "_fbp=" + fbp
+            + "; path=/"
+            + "; domain=" + domain
+            + "; expires=" + expires
+            + "; samesite=lax";
         }
         setFbpCookie();
       })();
@@ -76,6 +101,44 @@
       })();
     </script>
     <!-- End Meta Pixel Code -->
+    
+    <!-- Script para solicitar fbp do parent quando estiver em iframe -->
+    <script>
+      (function() {
+        // Verificar se está em iframe
+        var isInIframe = window.self !== window.top;
+        
+        if (isInIframe) {
+          // Armazenar fbp recebido do parent
+          var parentFbp = null;
+          
+          // Listener para receber resposta do parent
+          window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'FBP_RESPONSE' && event.data.fbp) {
+              parentFbp = event.data.fbp;
+              
+              // Salvar no sessionStorage para uso posterior
+              try {
+                sessionStorage.setItem('parent_fbp', parentFbp);
+                console.log('✅ FBP do parent salvo:', parentFbp);
+              } catch (e) {
+                console.warn('Erro ao salvar fbp no sessionStorage:', e);
+              }
+            }
+          });
+          
+          // Solicitar fbp do parent ao carregar
+          try {
+            window.parent.postMessage({
+              type: 'REQUEST_FBP'
+            }, '*');
+            console.log('📤 Solicitação de FBP enviada ao parent');
+          } catch (e) {
+            console.warn('⚠️ Erro ao solicitar fbp do parent:', e);
+          }
+        }
+      })();
+    </script>
   </head>
   <body>
     <!-- Meta Pixel Noscript Fallback -->

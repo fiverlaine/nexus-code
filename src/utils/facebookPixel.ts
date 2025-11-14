@@ -58,35 +58,150 @@ export function isPixelLoaded(): boolean {
   return typeof window !== 'undefined' && typeof window.fbq === 'function';
 }
 
+// Armazenar fbp recebido do parent window
+let parentFbp: string | null = null;
+let fbpRequestPending = false;
+
+/**
+ * Solicita o fbp do parent window via postMessage (para uso em iframe)
+ * 
+ * @returns {Promise<string | null>} Valor do fbp recebido do parent ou null
+ */
+function requestFbpFromParent(): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || window.self === window.top) {
+      // Não está em iframe
+      resolve(null);
+      return;
+    }
+
+    // Verificar se já temos o fbp do parent no sessionStorage (salvo pelo script do index.html)
+    try {
+      const storedFbp = sessionStorage.getItem('parent_fbp');
+      if (storedFbp) {
+        parentFbp = storedFbp;
+        resolve(parentFbp);
+        return;
+      }
+    } catch (e) {
+      // sessionStorage não disponível ou bloqueado
+    }
+
+    if (parentFbp) {
+      // Já temos o fbp do parent em memória
+      resolve(parentFbp);
+      return;
+    }
+
+    if (fbpRequestPending) {
+      // Já há uma requisição em andamento, aguardar um pouco
+      setTimeout(() => {
+        resolve(parentFbp);
+      }, 500);
+      return;
+    }
+
+    fbpRequestPending = true;
+
+    // Listener temporário para receber resposta
+    const messageListener = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'FBP_RESPONSE' && event.data.fbp) {
+        parentFbp = event.data.fbp;
+        // Salvar no sessionStorage para uso futuro
+        if (parentFbp) {
+          try {
+            sessionStorage.setItem('parent_fbp', parentFbp);
+          } catch (e) {
+            // sessionStorage não disponível
+          }
+        }
+        window.removeEventListener('message', messageListener);
+        fbpRequestPending = false;
+        console.log('✅ FBP recebido do parent:', parentFbp);
+        resolve(parentFbp);
+      }
+    };
+
+    window.addEventListener('message', messageListener);
+
+    // Solicitar fbp do parent
+    try {
+      window.parent.postMessage({
+        type: 'REQUEST_FBP'
+      }, '*'); // Usar '*' para permitir qualquer origem (ajustar se necessário)
+
+      // Timeout de 1 segundo
+      setTimeout(() => {
+        window.removeEventListener('message', messageListener);
+        fbpRequestPending = false;
+        if (!parentFbp) {
+          console.warn('⚠️ Timeout ao solicitar fbp do parent');
+        }
+        resolve(parentFbp);
+      }, 1000);
+    } catch (error) {
+      console.warn('⚠️ Erro ao solicitar fbp do parent:', error);
+      window.removeEventListener('message', messageListener);
+      fbpRequestPending = false;
+      resolve(null);
+    }
+  });
+}
+
 /**
  * Obtém o valor do cookie _fbp (Facebook Browser ID)
- * Também tenta obter do parent window se estiver em iframe
+ * Tenta obter do parent window via postMessage se estiver em iframe
+ * Ou da URL se o parâmetro fbp estiver presente (quando não está em iframe)
  * 
- * @returns {string | null} Valor do cookie _fbp ou null se não existir
+ * @returns {Promise<string | null>} Valor do cookie _fbp ou null se não existir
  */
-export function getFbpCookie(): string | null {
-  if (typeof document === 'undefined') return null;
+export async function getFbpCookie(): Promise<string | null> {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return null;
   
   try {
-    // Tentar obter do documento atual
+    // 1. Verificar se há fbp na URL (quando veio do insta1 via link direto)
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const fbpFromUrl = urlParams.get('fbp');
+      if (fbpFromUrl) {
+        console.log('✅ FBP obtido da URL:', fbpFromUrl);
+        // Salvar no sessionStorage para uso posterior
+        try {
+          sessionStorage.setItem('fbp_from_url', fbpFromUrl);
+        } catch (e) {
+          // sessionStorage não disponível
+        }
+        return fbpFromUrl;
+      }
+    } catch (urlError) {
+      console.warn('Erro ao ler fbp da URL:', urlError);
+    }
+
+    // 2. Se estiver em iframe, tentar obter do parent via postMessage
+    const isInIframe = window.self !== window.top;
+    if (isInIframe) {
+      const parentFbpValue = await requestFbpFromParent();
+      if (parentFbpValue) {
+        return parentFbpValue;
+      }
+    }
+
+    // 3. Verificar sessionStorage para fbp da URL (caso já tenha sido lido antes)
+    try {
+      const storedFbpFromUrl = sessionStorage.getItem('fbp_from_url');
+      if (storedFbpFromUrl) {
+        return storedFbpFromUrl;
+      }
+    } catch (e) {
+      // sessionStorage não disponível
+    }
+
+    // 4. Tentar obter do cookie local do documento atual
     const value = `; ${document.cookie}`;
     const parts = value.split(`; _fbp=`);
     if (parts.length === 2) {
       const cookieValue = parts.pop()?.split(';').shift() || null;
       if (cookieValue) return cookieValue;
-    }
-    
-    // Se estiver em iframe, tentar obter do parent
-    try {
-      if (window.parent && window.parent !== window) {
-        const parentValue = `; ${window.parent.document.cookie}`;
-        const parentParts = parentValue.split(`; _fbp=`);
-        if (parentParts.length === 2) {
-          return parentParts.pop()?.split(';').shift() || null;
-        }
-      }
-    } catch (e) {
-      // Não conseguiu acessar parent (cross-origin), continua
     }
   } catch (error) {
     console.warn('Erro ao ler cookie _fbp:', error);
@@ -139,8 +254,8 @@ async function collectCustomParams(): Promise<CustomParams> {
   const customParams: CustomParams = {};
 
   try {
-    // Facebook Browser ID (_fbp) - sempre disponível rapidamente
-    const fbp = getFbpCookie();
+    // Facebook Browser ID (_fbp) - tenta obter do parent primeiro se estiver em iframe
+    const fbp = await getFbpCookie();
     if (fbp) {
       customParams.fbp = fbp;
     }
@@ -259,7 +374,7 @@ export async function trackEvent(
     } catch (error) {
       // Se falhar, tenta adicionar apenas fbp e fbc (mais rápidos)
       try {
-        const fbp = getFbpCookie();
+        const fbp = await getFbpCookie();
         if (fbp) eventParams.fbp = fbp;
         
         const fbc = getFbcCookie();
@@ -378,7 +493,7 @@ export async function trackCustomEvent(
     } catch (error) {
       // Se falhar, tenta adicionar apenas fbp e fbc (mais rápidos)
       try {
-        const fbp = getFbpCookie();
+        const fbp = await getFbpCookie();
         if (fbp) eventParams.fbp = fbp;
         
         const fbc = getFbcCookie();
